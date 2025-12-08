@@ -8,13 +8,15 @@ const currencySymbols = {
   eur: "€"
 } as const;
 
-const exchangeRates = {
+type Currency = keyof typeof currencySymbols;
+
+type ExchangeRates = Record<Currency, Partial<Record<Currency, number>>>;
+
+const exchangeRates: ExchangeRates = {
   pi: { usd: 0.2, eur: 0.18 },
   usd: { pi: 5, eur: 0.9 },
   eur: { pi: 5.5, usd: 1.1 }
 };
-
-type Currency = keyof typeof currencySymbols;
 
 export default function Home() {
   const [amount, setAmount] = useState(1);
@@ -26,11 +28,12 @@ export default function Home() {
     ) as Currency[];
 
     return targets.map((target) => {
-      const rate = exchangeRates[sourceCurrency]?.[target as keyof typeof exchangeRates[Currency]] || 1;
+      const rate = exchangeRates[sourceCurrency]?.[target];
+      const safeRate = typeof rate === "number" && Number.isFinite(rate) ? rate : 1;
       return {
         target,
-        rate,
-        value: Number.isFinite(rate) ? amount * rate : amount
+        rate: safeRate,
+        value: amount * safeRate
       };
     });
   }, [amount, sourceCurrency]);
