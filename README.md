@@ -25,8 +25,25 @@ If you prefer environment variables, expose `NEXT_PUBLIC_PI_VALIDATION_KEY` in V
 1. Push this repository to your Git provider.
 2. Create a new Vercel project and import the repo.
 3. Use the default **Next.js** framework preset.
-4. Add any environment variables (e.g., `NEXT_PUBLIC_PI_VALIDATION_KEY`) in **Project Settings → Environment Variables**.
+4. Add environment variables in **Project Settings → Environment Variables** (see below).
 5. Trigger a deploy; Vercel will build using `npm run build` and serve the optimized app.
+
+### Environment variables
+
+The project works out-of-the-box; there is only **one optional variable** relevant to the current code:
+
+| Name | Required | Scope | Purpose |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_PI_VALIDATION_KEY` | No | Production/Preview | Alternative way to deliver the Pi validation string through the UI or an API route. Keep it in the Vercel dashboard and avoid hardcoding secrets. |
+
+Add the variable in both **Production** and **Preview** environments if you need consistent behavior across deployments.
+
+> ℹ️ The app does **not** use `NEXT_PUBLIC_PI_API_KEY`, `NEXT_PUBLIC_PI_APP_ID`, or `NEXT_PUBLIC_PI_SANDBOX` at this time. You only need to set them if you later integrate Pi SDK calls that require those identifiers.
+
+### Policy URLs
+
+- Terms of Use: `/terms`
+- Privacy Policy: `/privacy`
 
 ## Notes
 
