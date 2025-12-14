@@ -29,15 +29,15 @@ type Iou = {
 };
 
 const statusLabels: Record<IouStatus, string> = {
-  pending: "🕓 In attesa",
-  accepted: "🤝 Accettata",
-  paid: "✅ Pagata",
-  cancelled: "❌ Annullata"
+  pending: "🕓 Pending",
+  accepted: "🤝 Accepted",
+  paid: "✅ Paid",
+  cancelled: "❌ Cancelled"
 };
 
 const directionLabels: Record<IouDirection, string> = {
-  outgoing: "→ io devo pagare",
-  incoming: "← mi devono pagare"
+  outgoing: "→ I need to pay",
+  incoming: "← They need to pay me"
 };
 
 const placeholderIous: Iou[] = [
@@ -45,7 +45,7 @@ const placeholderIous: Iou[] = [
     id: "iou-1",
     amount: 10,
     counterparty: "Luca",
-    note: "Cena di ieri",
+    note: "Dinner last night",
     dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
     status: "pending",
     direction: "outgoing",
@@ -55,7 +55,7 @@ const placeholderIous: Iou[] = [
     id: "iou-2",
     amount: 6,
     counterparty: "Sara",
-    note: "Biglietti", 
+    note: "Tickets",
     status: "accepted",
     direction: "incoming",
     createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
@@ -65,7 +65,7 @@ const placeholderIous: Iou[] = [
     id: "iou-3",
     amount: 3.5,
     counterparty: "Mauro",
-    note: "Prestito",
+    note: "Loan",
     status: "paid",
     direction: "outgoing",
     createdAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
@@ -87,7 +87,7 @@ function formatDate(value?: string) {
 export default function Home() {
   const [piBrowserDetected, setPiBrowserDetected] = useState(false);
   const [piSdkAvailable, setPiSdkAvailable] = useState(false);
-  const [piStatus, setPiStatus] = useState("Verifica dell'ambiente Pi in corso...");
+  const [piStatus, setPiStatus] = useState("Checking the Pi environment...");
   const [authResult, setAuthResult] = useState<PiAuthResult | null>(null);
   const [serverUser, setServerUser] = useState<PiAuthResult["user"] | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -112,10 +112,10 @@ export default function Home() {
     setPiSdkAvailable(Boolean(sdk));
     setPiStatus(
       sdk
-        ? "Pronto a usare i pagamenti Pi."
+        ? "Ready to use Pi payments."
         : isPiBrowser
-          ? "Pi Browser è aperto, sto aspettando gli strumenti Pi."
-          : "Apri l'app nel Pi Browser per abilitare i pagamenti."
+          ? "Pi Browser is open, waiting for the Pi tools."
+          : "Open this app in Pi Browser to enable payments."
     );
 
     if (sdk) {
@@ -124,7 +124,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const targetId = view === "create" ? "crea" : view === "list" ? "list" : view === "detail" ? "detail" : "top";
+    const targetId = view === "create" ? "create" : view === "list" ? "list" : view === "detail" ? "detail" : "top";
     const element = typeof document !== "undefined" ? document.getElementById(targetId) : null;
 
     if (element) {
@@ -152,11 +152,11 @@ export default function Home() {
       body: JSON.stringify({ identifier, action, amount, memo })
     });
 
-    if (!response.ok) {
-      const payload = (await response.json()) as { error?: string };
-      const message = payload?.error ?? "Richiesta al server non riuscita.";
-      throw new Error(message);
-    }
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        const message = payload?.error ?? "Server request failed.";
+        throw new Error(message);
+      }
 
     const payload = (await response.json()) as { payment?: { status?: string } };
 
@@ -171,20 +171,20 @@ export default function Home() {
     setServerUser(null);
     setIsAuthLoading(true);
 
-    setPiStatus("Richiesta di accesso Pi in corso...");
+    setPiStatus("Requesting Pi sign-in...");
 
     try {
       const auth = await authenticateWithPi((payment) => {
-        setPaymentStatus(`Ho trovato un pagamento non chiuso (${payment.identifier}). Chiudilo dal server.`);
+        setPaymentStatus(`Found an open payment (${payment.identifier}). Close it from the server.`);
       });
 
-      setPiStatus("Accesso completato. Verifico i dati con il server...");
+      setPiStatus("Sign-in complete. Verifying with the server...");
 
       const verification = await verifyPiAuth(auth);
 
       setAuthResult(auth);
       setServerUser(verification.user);
-      setPiStatus("Sessione Pi confermata dal server.");
+      setPiStatus("Pi session confirmed by the server.");
     } catch (error) {
       setAuthError((error as Error).message);
       setAuthResult(null);
@@ -199,7 +199,7 @@ export default function Home() {
     const amount = Number(formAmount);
 
     if (!Number.isFinite(amount) || amount <= 0 || !formCounterparty.trim()) {
-      setPaymentStatus("Compila importo e controparte per creare la IOU.");
+      setPaymentStatus("Add an amount and who you owe to create the IOU.");
       return;
     }
 
@@ -221,7 +221,7 @@ export default function Home() {
     setFormCounterparty("");
     setFormNote("");
     setFormDueDate("");
-    setPaymentStatus("IOU creata. Nessun Pi mosso finché non paghi.");
+    setPaymentStatus("IOU created. No Pi moves until you pay.");
   };
 
   const handleAcceptIou = (id: string) => {
@@ -260,7 +260,7 @@ export default function Home() {
     setActivePaymentId(null);
 
     if (!authResult) {
-      setPaymentStatus("Accedi con Pi prima di pagare la IOU.");
+      setPaymentStatus("Sign in with Pi before paying the IOU.");
       return;
     }
 
@@ -268,17 +268,17 @@ export default function Home() {
 
     let paymentIdentifier: string | null = null;
 
-    const memoText = `Pagamento IOU per ${iou.counterparty}${iou.note ? `: ${iou.note}` : ""}`;
+    const memoText = `IOU payment for ${iou.counterparty}${iou.note ? `: ${iou.note}` : ""}`;
 
     const paymentCallbacks = {
       onReadyForServerApproval: async (pendingPayment: { identifier: string }) => {
         paymentIdentifier = pendingPayment?.identifier ?? paymentIdentifier;
         setActivePaymentId(paymentIdentifier);
-        setPaymentStatus(`Pagamenti Pi pronti: conferma dal server ${pendingPayment.identifier}.`);
+        setPaymentStatus(`Pi payments ready: waiting for server approval ${pendingPayment.identifier}.`);
 
         try {
           await syncMockPayment(pendingPayment.identifier, "approve");
-          setPaymentStatus(`Pagamento ${pendingPayment.identifier} approvato dal server di esempio.`);
+          setPaymentStatus(`Payment ${pendingPayment.identifier} approved by the sample server.`);
         } catch (error) {
           setPaymentStatus((error as Error).message);
         }
@@ -286,11 +286,11 @@ export default function Home() {
       onReadyForServerCompletion: async (pendingPayment: { identifier: string }) => {
         paymentIdentifier = pendingPayment?.identifier ?? paymentIdentifier;
         setActivePaymentId(paymentIdentifier);
-        setPaymentStatus(`Il server può chiudere il pagamento ${pendingPayment.identifier}.`);
+        setPaymentStatus(`The server can now complete payment ${pendingPayment.identifier}.`);
 
         try {
           await syncMockPayment(pendingPayment.identifier, "complete");
-          setPaymentStatus(`IOU saldata. ${pendingPayment.identifier} chiuso.`);
+          setPaymentStatus(`IOU settled. ${pendingPayment.identifier} closed.`);
           setIous((previous) =>
             previous.map((item) =>
               item.id === iou.id
@@ -308,7 +308,7 @@ export default function Home() {
       },
       onCancel: (pendingPayment?: { identifier?: string }) => {
         const paymentId = pendingPayment?.identifier ? ` ${pendingPayment.identifier}` : "";
-        setPaymentStatus(`Pagamento${paymentId} annullato.`);
+        setPaymentStatus(`Payment${paymentId} cancelled.`);
 
         if (pendingPayment?.identifier) {
           syncMockPayment(pendingPayment.identifier, "cancel").catch(() => {
@@ -317,8 +317,8 @@ export default function Home() {
         }
       },
       onError: (error: unknown, pendingPayment?: { identifier?: string }) => {
-        const paymentId = pendingPayment?.identifier ? ` sul pagamento ${pendingPayment.identifier}` : "";
-        setPaymentStatus(`Errore${paymentId}: ${String(error)}`);
+        const paymentId = pendingPayment?.identifier ? ` for payment ${pendingPayment.identifier}` : "";
+        setPaymentStatus(`Error${paymentId}: ${String(error)}`);
       }
     };
 
@@ -326,7 +326,7 @@ export default function Home() {
       const payment = await createTestPayment(iou.amount, memoText, paymentCallbacks);
 
       if (payment?.identifier) {
-        setPaymentStatus(`Pagamento ${payment.identifier} creato. Segui le indicazioni del server.`);
+        setPaymentStatus(`Payment ${payment.identifier} created. Follow the server prompts.`);
 
         setActivePaymentId(payment.identifier);
         appendMockLog(`Cliente: creato ${payment.identifier}`);
@@ -353,14 +353,14 @@ export default function Home() {
         <div>
           <p className="text-sm text-piGold">{directionLabels[iou.direction]}</p>
           <h3 className="text-2xl font-bold">{iou.amount} Pi</h3>
-          <p className="text-sm text-slate-300">Controparte: {iou.counterparty}</p>
-        </div>
-        <span className="pill text-xs">{statusLabels[iou.status]}</span>
+          <p className="text-sm text-slate-300">Counterparty: {iou.counterparty}</p>
       </div>
-      {iou.note ? <p className="text-sm text-slate-200">Nota: {iou.note}</p> : null}
+      <span className="pill text-xs">{statusLabels[iou.status]}</span>
+    </div>
+    {iou.note ? <p className="text-sm text-slate-200">Note: {iou.note}</p> : null}
       <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-        <span>Creata: {formatDate(iou.createdAt)}</span>
-        <span>Scadenza: {formatDate(iou.dueDate)}</span>
+        <span>Created: {formatDate(iou.createdAt)}</span>
+        <span>Due date: {formatDate(iou.dueDate)}</span>
       </div>
       <div className="flex flex-wrap gap-2 text-sm">
         <button
@@ -371,7 +371,7 @@ export default function Home() {
           }}
           className="rounded-lg border border-white/20 px-3 py-2 font-semibold text-slate-100 transition hover:border-piGold hover:text-piGold"
         >
-          Apri dettaglio
+          Open details
         </button>
         {iou.status === "pending" && iou.direction === "incoming" ? (
           <>
@@ -380,14 +380,14 @@ export default function Home() {
               onClick={() => handleAcceptIou(iou.id)}
               className="rounded-lg bg-piGold px-3 py-2 font-semibold text-[#0f1020] transition hover:brightness-110"
             >
-              Accetta IOU
+              Accept IOU
             </button>
             <button
               type="button"
               onClick={() => handleRejectIou(iou.id)}
               className="rounded-lg border border-red-400/60 px-3 py-2 font-semibold text-red-200 transition hover:bg-red-500/10"
             >
-              Rifiuta
+              Decline
             </button>
           </>
         ) : null}
@@ -402,25 +402,25 @@ export default function Home() {
     >
       <header className="flex flex-col gap-4 text-center">
         <p className="text-sm uppercase tracking-[0.2em] text-piGold">IOU App</p>
-        <h1 className="text-4xl font-bold leading-tight md:text-5xl">💸 Segna un debito. Pagalo in Pi.</h1>
+        <h1 className="text-4xl font-bold leading-tight md:text-5xl">💸 Log an IOU. Settle it in Pi.</h1>
         <p className="text-lg text-slate-200 md:text-xl">
-          Crea una IOU, condividila con qualcuno e saldala quando vuoi — in Pi.
+          Create an IOU, share it with someone, and settle it whenever you like — in Pi.
         </p>
-        <p className="text-sm text-slate-300">Una IOU è una promessa di pagamento tra due persone.</p>
+        <p className="text-sm text-slate-300">An IOU is a promise to pay between two people.</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
             onClick={() => setView("create")}
             className="button-primary"
           >
-            ➕ Crea una IOU
+            ➕ Create an IOU
           </button>
           <button
             type="button"
             onClick={() => setView("list")}
             className="rounded-lg border border-white/20 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-piGold hover:text-piGold"
           >
-            📄 Vedi le mie IOU
+            📄 See my IOUs
           </button>
         </div>
       </header>
@@ -430,20 +430,20 @@ export default function Home() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-piGold">Pi Browser</p>
-              <h2 className="text-2xl font-semibold">Pronto per pagare</h2>
-              <p className="text-sm text-slate-300">Controllo automatico per capire se sei dentro il Pi Browser.</p>
+              <h2 className="text-2xl font-semibold">Ready to pay</h2>
+              <p className="text-sm text-slate-300">Automatic checks confirm if you are inside Pi Browser.</p>
             </div>
-            <span className="pill text-xs text-slate-100">{piSdkAvailable ? "Attivo" : "In attesa"}</span>
+            <span className="pill text-xs text-slate-100">{piSdkAvailable ? "Active" : "Waiting"}</span>
           </div>
           <ul className="mt-4 space-y-2 text-sm text-slate-200">
             <li>
-              <span className="font-semibold text-piGold">Browser:</span> {piBrowserDetected ? "Pi Browser" : "Altro"}
+              <span className="font-semibold text-piGold">Browser:</span> {piBrowserDetected ? "Pi Browser" : "Other"}
             </li>
             <li>
-              <span className="font-semibold text-piGold">Stato strumenti:</span> {piSdkAvailable ? "Caricati" : "Non disponibili"}
+              <span className="font-semibold text-piGold">Tools status:</span> {piSdkAvailable ? "Loaded" : "Unavailable"}
             </li>
             <li>
-              <span className="font-semibold text-piGold">Messaggio:</span> {piStatus}
+              <span className="font-semibold text-piGold">Message:</span> {piStatus}
             </li>
           </ul>
         </div>
@@ -451,9 +451,9 @@ export default function Home() {
         <div className="glass-card flex flex-col gap-4 p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm uppercase tracking-[0.2em] text-piGold">Accesso</p>
-              <h2 className="text-xl font-semibold">Entra con il tuo account Pi</h2>
-              <p className="text-xs text-slate-300">Serve per associare le IOU alla tua identità.</p>
+              <p className="text-sm uppercase tracking-[0.2em] text-piGold">Sign in</p>
+              <h2 className="text-xl font-semibold">Sign in with your Pi account</h2>
+              <p className="text-xs text-slate-300">This links IOUs to your identity.</p>
             </div>
             <button
               type="button"
@@ -461,7 +461,7 @@ export default function Home() {
               disabled={!piSdkAvailable || isAuthLoading}
               className="rounded-lg bg-piGold px-4 py-2 text-sm font-semibold text-[#0f1020] shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isAuthLoading ? "Accesso..." : "Accedi"}
+              {isAuthLoading ? "Signing in..." : "Sign in"}
             </button>
           </div>
 
@@ -469,14 +469,14 @@ export default function Home() {
             <div className="rounded-lg border border-green-400/60 bg-green-500/10 p-4 text-sm text-green-100">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold">
-                  {serverUser ? "Utente verificato dal server" : "Accesso Pi confermato"}
+                  {serverUser ? "User verified by server" : "Pi sign-in confirmed"}
                 </p>
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
                     serverUser ? "bg-green-600/80 text-white" : "bg-yellow-500/20 text-yellow-200"
                   }`}
                 >
-                  {serverUser ? "Verificato" : "In attesa"}
+                  {serverUser ? "Verified" : "Pending"}
                 </span>
               </div>
 
@@ -485,26 +485,11 @@ export default function Home() {
             </div>
           ) : (
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-              <p>Accedi per collegare le IOU al tuo profilo Pi e poterle pagare.</p>
+              <p>Sign in to link IOUs to your Pi profile and pay them.</p>
             </div>
           )}
 
           {authError ? <p className="text-sm text-red-300">{authError}</p> : null}
-        </div>
-      </section>
-
-      <section className="glass-card grid gap-6 p-6 md:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-4">
-          <p className="text-sm uppercase tracking-[0.2em] text-piGold">Cosa è una IOU</p>
-          <h2 className="text-2xl font-semibold">Promessa chiara, pagamento in Pi</h2>
-          <ul className="list-disc space-y-2 pl-5 text-sm text-slate-200">
-            <li>Scrivi chi paga chi, quanto e perché.</li>
-            <li>La creazione non muove Pi: è solo un promemoria condiviso.</li>
-              <li>Quando sei pronto, paga la IOU con Pi direttamente dall&apos;app.</li>
-          </ul>
-          <p className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-            Stati possibili: {statusLabels.pending}, {statusLabels.accepted}, {statusLabels.paid}, {statusLabels.cancelled}.
-          </p>
         </div>
         <div className="space-y-3 rounded-2xl border border-piGold/30 bg-piGold/10 p-5 text-sm text-piGold">
           <p className="font-semibold text-slate-100">Esempio di dettaglio</p>
@@ -516,13 +501,36 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="crea" className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
+      <section className="glass-card grid gap-6 p-6 md:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-4">
+          <p className="text-sm uppercase tracking-[0.2em] text-piGold">What is an IOU</p>
+          <h2 className="text-2xl font-semibold">Clear promise, paid in Pi</h2>
+          <ul className="list-disc space-y-2 pl-5 text-sm text-slate-200">
+            <li>Write who pays whom, how much, and why.</li>
+            <li>Creating it does not move Pi: it is just a shared reminder.</li>
+            <li>When you are ready, pay the IOU with Pi directly from the app.</li>
+          </ul>
+          <p className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+            Possible states: {statusLabels.pending}, {statusLabels.accepted}, {statusLabels.paid}, {statusLabels.cancelled}.
+          </p>
+        </div>
+        <div className="space-y-3 rounded-2xl border border-piGold/30 bg-piGold/10 p-5 text-sm text-piGold">
+          <p className="font-semibold text-slate-100">Detail example</p>
+          <p className="text-lg font-bold text-slate-100">10 Pi</p>
+          <p className="text-slate-100">To pay Luca</p>
+          <p className="text-slate-100">Status: {statusLabels.pending}</p>
+          <p className="text-slate-100">Reason: Dinner last night</p>
+          <p className="text-slate-100">Due date: {formatDate(placeholderIous[0]?.dueDate)}</p>
+        </div>
+      </section>
+
+      <section id="create" className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
         <form onSubmit={handleCreateIou} className="glass-card flex flex-col gap-4 p-6">
-          <p className="text-sm uppercase tracking-[0.2em] text-piGold">Creazione IOU</p>
-          <h2 className="text-2xl font-semibold">Crea una nuova promessa</h2>
+          <p className="text-sm uppercase tracking-[0.2em] text-piGold">Create IOU</p>
+          <h2 className="text-2xl font-semibold">Make a new promise</h2>
 
           <label className="space-y-2 text-sm font-medium text-slate-200">
-            Importo (in Pi)
+            Amount (in Pi)
             <input
               type="number"
               min={0.01}
@@ -534,7 +542,7 @@ export default function Home() {
           </label>
 
           <label className="space-y-2 text-sm font-medium text-slate-200">
-            A chi devo questi Pi?
+            Who do I owe these Pi to?
             <input
               type="text"
               value={formCounterparty}
@@ -544,10 +552,10 @@ export default function Home() {
           </label>
 
           <label className="space-y-2 text-sm font-medium text-slate-200">
-            Nota (opzionale)
+            Note (optional)
             <input
               type="text"
-              placeholder="Cena di ieri, biglietti, prestito"
+              placeholder="Dinner last night, tickets, loan"
               value={formNote}
               onChange={(event) => setFormNote(event.target.value)}
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-lg text-white outline-none transition focus:border-piGold focus:ring-2 focus:ring-piGold/60"
@@ -555,7 +563,7 @@ export default function Home() {
           </label>
 
           <label className="space-y-2 text-sm font-medium text-slate-200">
-            Scadenza (opzionale)
+            Due date (optional)
             <input
               type="date"
               value={formDueDate}
@@ -568,30 +576,30 @@ export default function Home() {
             type="submit"
             className="button-primary w-full justify-center text-center"
           >
-            Crea IOU
+            Create IOU
           </button>
-          <p className="text-xs text-slate-400">Stato iniziale: {statusLabels.pending}. Nessun pagamento avviato.</p>
+          <p className="text-xs text-slate-400">Starting state: {statusLabels.pending}. No payment started.</p>
         </form>
 
         <div className="glass-card flex flex-col gap-4 p-6">
-          <p className="text-sm uppercase tracking-[0.2em] text-piGold">Come funziona</p>
-          <h2 className="text-xl font-semibold">Accetta, rifiuta, paga</h2>
+          <p className="text-sm uppercase tracking-[0.2em] text-piGold">How it works</p>
+          <h2 className="text-xl font-semibold">Accept, decline, pay</h2>
           <ul className="list-disc space-y-2 pl-5 text-sm text-slate-200">
-            <li>Chi riceve la IOU può accettarla oppure rifiutarla.</li>
-            <li>Accettare non equivale a pagare: è solo il via libera.</li>
-              <li>Per pagare, apri il dettaglio e premi il pulsante 💰 Paga in Pi.</li>
+            <li>The receiver can accept the IOU or decline it.</li>
+            <li>Accepting is not paying: it is just a green light.</li>
+            <li>To pay, open the detail and press 💰 Pay in Pi.</li>
           </ul>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-              Stai per saldare questa IOU pagando l&apos;importo concordato alla controparte.
-            </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+            You are about to settle this IOU by paying the agreed amount to the counterparty.
+          </div>
         </div>
       </section>
 
       <section id="list" className="glass-card space-y-4 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-piGold">Le mie IOU</p>
-            <h2 className="text-2xl font-semibold">Panoramica veloce</h2>
+            <p className="text-sm uppercase tracking-[0.2em] text-piGold">My IOUs</p>
+            <h2 className="text-2xl font-semibold">Quick overview</h2>
           </div>
           <div className="flex gap-2 text-sm">
             <button
@@ -599,7 +607,7 @@ export default function Home() {
               onClick={() => setView("create")}
               className="rounded-lg border border-white/20 px-3 py-2 font-semibold text-slate-100 transition hover:border-piGold hover:text-piGold"
             >
-              ➕ Crea
+              ➕ Create
             </button>
             <button
               type="button"
@@ -607,7 +615,7 @@ export default function Home() {
               disabled={!selectedIou}
               className="rounded-lg border border-white/20 px-3 py-2 font-semibold text-slate-100 transition hover:border-piGold hover:text-piGold disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Apri selezionata
+              Open selected
             </button>
           </div>
         </div>
@@ -619,22 +627,22 @@ export default function Home() {
       {selectedIou ? (
         <section id="detail" className="glass-card grid gap-6 p-6 md:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-4">
-            <p className="text-sm uppercase tracking-[0.2em] text-piGold">Dettaglio IOU</p>
+            <p className="text-sm uppercase tracking-[0.2em] text-piGold">IOU detail</p>
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-3xl font-bold">{selectedIou.amount} Pi</h2>
-                <p className="text-slate-200">Da pagare a {selectedIou.counterparty}</p>
+                <p className="text-slate-200">To pay {selectedIou.counterparty}</p>
                 <p className="text-sm text-slate-300">{directionLabels[selectedIou.direction]}</p>
               </div>
               <span className="pill text-xs">{statusLabels[selectedIou.status]}</span>
             </div>
             <div className="grid gap-3 text-sm text-slate-200">
-              <p><span className="font-semibold text-piGold">Nota:</span> {selectedIou.note || "—"}</p>
-              <p><span className="font-semibold text-piGold">Creata:</span> {formatDate(selectedIou.createdAt)}</p>
-              <p><span className="font-semibold text-piGold">Scadenza:</span> {formatDate(selectedIou.dueDate)}</p>
-              <p><span className="font-semibold text-piGold">Accettata:</span> {formatDate(selectedIou.acceptedAt)}</p>
-              <p><span className="font-semibold text-piGold">Pagata:</span> {formatDate(selectedIou.paidAt)}</p>
-              <p><span className="font-semibold text-piGold">Annullata:</span> {formatDate(selectedIou.cancelledAt)}</p>
+              <p><span className="font-semibold text-piGold">Note:</span> {selectedIou.note || "—"}</p>
+              <p><span className="font-semibold text-piGold">Created:</span> {formatDate(selectedIou.createdAt)}</p>
+              <p><span className="font-semibold text-piGold">Due date:</span> {formatDate(selectedIou.dueDate)}</p>
+              <p><span className="font-semibold text-piGold">Accepted:</span> {formatDate(selectedIou.acceptedAt)}</p>
+              <p><span className="font-semibold text-piGold">Paid:</span> {formatDate(selectedIou.paidAt)}</p>
+              <p><span className="font-semibold text-piGold">Cancelled:</span> {formatDate(selectedIou.cancelledAt)}</p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               {selectedIou.status === "pending" ? (
@@ -644,14 +652,14 @@ export default function Home() {
                     onClick={() => handleAcceptIou(selectedIou.id)}
                     className="rounded-lg bg-piGold px-4 py-2 font-semibold text-[#0f1020] transition hover:brightness-110"
                   >
-                    ✅ Accetta IOU
+                    ✅ Accept IOU
                   </button>
                   <button
                     type="button"
                     onClick={() => handleRejectIou(selectedIou.id)}
                     className="rounded-lg border border-red-400/60 px-4 py-2 font-semibold text-red-200 transition hover:bg-red-500/10"
                   >
-                    ❌ Rifiuta
+                    ❌ Decline
                   </button>
                 </>
               ) : null}
@@ -662,19 +670,19 @@ export default function Home() {
                   disabled={isPaymentLoading}
                   className="rounded-lg bg-white/10 px-4 py-2 font-semibold text-white ring-1 ring-white/20 transition hover:ring-piGold/80 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isPaymentLoading ? "Elaborazione..." : "💰 Paga in Pi"}
+                  {isPaymentLoading ? "Processing..." : "💰 Pay in Pi"}
                 </button>
               ) : null}
             </div>
             <p className="text-sm text-slate-300">
-              Stai per saldare questa IOU pagando {selectedIou.amount} Pi a {selectedIou.counterparty}.
+              You are about to settle this IOU by paying {selectedIou.amount} Pi to {selectedIou.counterparty}.
             </p>
           </div>
 
           <div className="space-y-4">
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-              <p className="font-semibold text-slate-100">Timeline pagamento</p>
-              {activePaymentId ? <p className="text-piGold">ID attuale: {activePaymentId}</p> : null}
+              <p className="font-semibold text-slate-100">Payment timeline</p>
+              {activePaymentId ? <p className="text-piGold">Current ID: {activePaymentId}</p> : null}
               {mockPaymentLog.length ? (
                 <ul className="mt-2 space-y-1 text-slate-300">
                   {mockPaymentLog.map((entry, index) => (
@@ -682,7 +690,7 @@ export default function Home() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-slate-400">La timeline si riempirà quando avvierai un pagamento.</p>
+                <p className="text-slate-400">The timeline will fill up when you start a payment.</p>
               )}
             </div>
             {paymentStatus ? <p className="rounded-lg border border-piGold/50 bg-piGold/10 p-3 text-sm text-piGold">{paymentStatus}</p> : null}
