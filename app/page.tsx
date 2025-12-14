@@ -1,4 +1,4 @@
-"use client";
+9"use client";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -333,22 +333,7 @@ export default function Home() {
     "createdAt / settledAt",
     "paymentId (from Pi SDK callbacks)"
   ];
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-8 px-6 py-10">
-      <header className="flex flex-col gap-4 text-center">
-        <div className="pill mx-auto">Pi-first IOU companion</div>
-        <div className="glass-card glow-border mx-auto max-w-4xl p-6 md:p-8">
-          <h1 className="text-4xl font-bold leading-tight md:text-5xl">Pi IOUs without ambiguity</h1>
-          <p className="mt-3 text-lg text-slate-200 md:text-xl">
-            Create, track, and settle IOUs the way Pi reviewers expect: clear actors, visible state, and Pi SDK-driven payments.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm text-slate-200">
-            <span className="pill text-xs text-slate-100">No dead screens</span>
-            <span className="pill text-xs text-slate-100">Mock payments ready</span>
-            <span className="pill text-xs text-slate-100">English-first copy</span>
-  const reviewHighlights = [
-    {
+  {
       title: "Pi-first UX",
       copy: "Every flow is scoped for Pi Browser with SDK detection, validation endpoint, and English-only copy."
     },
@@ -369,7 +354,19 @@ export default function Home() {
     "Highlight policies inside Pi Browser friendly routes.",
     "Request only username + payments permissions."
   ];
-
+  return (
+    <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-8 px-6 py-10">
+      <header className="flex flex-col gap-4 text-center">
+        <div className="pill mx-auto">Pi-first IOU companion</div>
+        <div className="glass-card glow-border mx-auto max-w-4xl p-6 md:p-8">
+          <h1 className="text-4xl font-bold leading-tight md:text-5xl">Pi IOUs without ambiguity</h1>
+          <p className="mt-3 text-lg text-slate-200 md:text-xl">
+            Create, track, and settle IOUs the way Pi reviewers expect: clear actors, visible state, and Pi SDK-driven payments.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm text-slate-200">
+            <span className="pill text-xs text-slate-100">No dead screens</span>
+            <span className="pill text-xs text-slate-100">Mock payments ready</span>
+            <span className="pill text-xs text-slate-100">English-first copy</span>
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-10 px-6 py-12">
       <header className="flex flex-col gap-5 text-center">
