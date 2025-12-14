@@ -11,25 +11,71 @@ import {
   verifyPiAuth
 } from "@/lib/pi-sdk";
 
-const currencySymbols = {
-  pi: "π",
-  usd: "$",
-  eur: "€"
-} as const;
+type IouStatus = "open" | "paid" | "cancelled";
 
-type Currency = keyof typeof currencySymbols;
+interface Iou {
+  id: string;
+  creditor: string;
+  debtor: string;
+  amount: number;
+  note: string;
+  status: IouStatus;
+  createdAt: string;
+  settledAt?: string;
+  paymentId?: string;
+}
 
-type ExchangeRates = Record<Currency, Partial<Record<Currency, number>>>;
+function formatDate(iso?: string) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
 
-const exchangeRates: ExchangeRates = {
-  pi: { usd: 0.2, eur: 0.18 },
-  usd: { pi: 5, eur: 0.9 },
-  eur: { pi: 5.5, usd: 1.1 }
-};
+function formatAmount(amount: number) {
+  return `${amount.toFixed(2)} π`;
+}
+
+function normalize(username?: string | null) {
+  return username?.trim().toLowerCase() ?? "";
+}
 
 export default function Home() {
-  const [amount, setAmount] = useState(1);
-  const [sourceCurrency, setSourceCurrency] = useState<Currency>("pi");
+  const [ious, setIous] = useState<Iou[]>([
+    {
+      id: "iou-1001",
+      creditor: "pi-hannah",
+      debtor: "pi-luca",
+      amount: 3.5,
+      note: "Shared ride from the hackathon venue",
+      status: "open",
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString()
+    },
+    {
+      id: "iou-1002",
+      creditor: "pi-luca",
+      debtor: "pi-sara",
+      amount: 1.2,
+      note: "Cappuccino + croissant",
+      status: "paid",
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+      settledAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+      paymentId: "pay-demo-2048"
+    },
+    {
+      id: "iou-1003",
+      creditor: "pi-jo",
+      debtor: "pi-hannah",
+      amount: 0.8,
+      note: "Snacks before the meetup",
+      status: "cancelled",
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 10).toISOString(),
+      settledAt: new Date(Date.now() - 1000 * 60 * 60 * 9).toISOString()
+    }
+  ]);
   const [piBrowserDetected, setPiBrowserDetected] = useState(false);
   const [piSdkAvailable, setPiSdkAvailable] = useState(false);
   const [piStatus, setPiStatus] = useState("Checking Pi Browser...");
@@ -41,7 +87,15 @@ export default function Home() {
   const [activePaymentId, setActivePaymentId] = useState<string | null>(null);
   const [mockPaymentLog, setMockPaymentLog] = useState<string[]>([]);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [activePaymentId, setActivePaymentId] = useState<string | null>(null);
+  const [mockPaymentLog, setMockPaymentLog] = useState<string[]>([]);
   const [isPaymentLoading, setIsPaymentLoading] = useState(false);
+  const [selectedIouId, setSelectedIouId] = useState<string | null>(null);
+  const [newCreditor, setNewCreditor] = useState("pi-hannah");
+  const [newDebtor, setNewDebtor] = useState("pi-you");
+  const [newAmount, setNewAmount] = useState(2.5);
+  const [newNote, setNewNote] = useState("Lunch split");
 
   useEffect(() => {
     const { sdk, isPiBrowser } = detectPiSdk();
@@ -52,9 +106,8 @@ export default function Home() {
         ? "Pi SDK detected. Ready for secure sign-in."
         : isPiBrowser
           ? "Pi Browser is open. Waiting for the SDK to finish loading."
-          : "Open this DApp inside Pi Browser to unlock the SDK."
+          : "Open this IOU companion inside Pi Browser to unlock the SDK."
     );
-
     if (sdk) {
       initializePiSdk(sdk);
     }
@@ -111,27 +164,78 @@ export default function Home() {
     setServerUser(null);
     setIsAuthLoading(true);
 
-    setPiStatus("Requesting Pi authentication...");
+  const youOweList = useMemo(
+    () => ious.filter((iou) => normalize(iou.debtor) === normalizedUser),
+    [ious, normalizedUser]
+  );
+  const owedToYouList = useMemo(
+    () => ious.filter((iou) => normalize(iou.creditor) === normalizedUser),
+    [ious, normalizedUser]
+  );
 
-    try {
-      const auth = await authenticateWithPi((payment) => {
-        setPaymentStatus(`Found incomplete payment ${payment.identifier}. Complete it on your server.`);
-      });
+  const totals = useMemo(() => {
+    const owedToYou = owedToYouList.filter((iou) => iou.status === "open");
+    const youOwe = youOweList.filter((iou) => iou.status === "open");
+    return {
+      open: ious.filter((iou) => iou.status === "open").length,
+      owedToYou: owedToYou.reduce((sum, iou) => sum + iou.amount, 0),
+      youOwe: youOwe.reduce((sum, iou) => sum + iou.amount, 0)
+    };
+  }, [ious, owedToYouList, youOweList]);
 
-      setPiStatus("Authenticated with Pi SDK. Verifying with server...");
+  const appendMockLog = (entry: string) => {
+    setMockPaymentLog((previous) => [...previous, entry]);
+  };
 
-      const verification = await verifyPiAuth(auth);
-
-      setAuthResult(auth);
-      setServerUser(verification.user);
-      setPiStatus("Server verification complete. Pioneer session ready.");
-    } catch (error) {
-      setAuthError((error as Error).message);
-      setAuthResult(null);
-      setServerUser(null);
-    } finally {
-      setIsAuthLoading(false);
+  const syncMockPayment = async (
+    identifier: string,
+    action: "init" | "approve" | "complete" | "cancel",
+    amount?: number,
+    memo?: string
+  ) => {
+    const response = await fetch("/api/pi/mock-payments", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ identifier, action, amount, memo })
+    });
+    if (!response.ok) {
+      const payload = (await response.json()) as { error?: string };
+      throw new Error(payload?.error ?? "Mock server request failed.");
     }
+    const payload = (await response.json()) as { payment?: { status?: string } };
+    if (payload.payment?.status) {
+      appendMockLog(`Server: ${payload.payment.status}`);
+    }
+  };
+
+  const upsertIou = (id: string, updates: Partial<Iou>) => {
+    setIous((previous) => previous.map((entry) => (entry.id === id ? { ...entry, ...updates } : entry)));
+  };
+
+  const handleCreateIou = () => {
+    if (!newCreditor.trim() || !newDebtor.trim() || !newNote.trim()) {
+      setPaymentStatus("Provide creditor, debtor, and a short reason.");
+      return;
+    }
+    if (!Number.isFinite(newAmount) || newAmount <= 0) {
+      setPaymentStatus("Enter a positive Pi amount.");
+      return;
+    }
+    const id = `iou-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const entry: Iou = {
+      id,
+      creditor: newCreditor.trim(),
+      debtor: newDebtor.trim(),
+      amount: Number(newAmount.toFixed(2)),
+      note: newNote.trim(),
+      status: "open",
+      createdAt: new Date().toISOString()
+    };
+    setIous((previous) => [entry, ...previous]);
+    setPaymentStatus("IOU created. You can settle it immediately with Pi.");
+    setSelectedIouId(id);
   };
 
   const handlePayment = async () => {
@@ -140,11 +244,13 @@ export default function Home() {
     setMockPaymentLog([]);
     setActivePaymentId(null);
 
+  const handleSettleIou = async (iou: Iou) => {
     if (!authResult) {
-      setPaymentStatus("Sign in with Pi first to send Pi or Test-Pi.");
+      setPaymentStatus("Sign in with Pi first to settle an IOU.");
       return;
     }
-
+    setSelectedIouId(iou.id);
+    setPaymentStatus(`Creating Pi payment to settle ${iou.debtor} → ${iou.creditor}.`);
     setIsPaymentLoading(true);
 
     let paymentIdentifier: string | null = null;
@@ -186,14 +292,15 @@ export default function Home() {
           if (pendingPayment?.identifier) {
             syncMockPayment(pendingPayment.identifier, "cancel").catch(() => {
               // Cancellation errors are non-blocking for the demo.
-            });
+            }
           }
         },
         onError: (error, pendingPayment) => {
-          const paymentId = pendingPayment?.identifier ? ` on payment ${pendingPayment.identifier}` : "";
-          setPaymentStatus(`Error${paymentId}: ${String(error)}`);
-        }
-      });
+  const paymentId = pendingPayment?.identifier
+    ? ` on payment ${pendingPayment.identifier}`
+    : "";
+  setPaymentStatus(`Error${paymentId}: ${String(error)}`
+},
 
       if (payment?.identifier) {
         setPaymentStatus(
@@ -285,7 +392,7 @@ export default function Home() {
               <span className="font-semibold text-piGold">SDK status:</span> {piSdkAvailable ? "Loaded" : "Waiting"}
             </li>
             <li>
-              <span className="font-semibold text-piGold">State:</span> {piStatus}
+              <span className="font-semibold text-piGold">Message:</span> {piStatus}
             </li>
           </ul>
           <p className="mt-4 text-sm text-slate-300">
@@ -303,11 +410,11 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={handleSignIn}
-              disabled={!piSdkAvailable || isAuthLoading}
+              onClick={handleAuth}
+              disabled={isAuthLoading || !piSdkAvailable}
               className="rounded-lg bg-piGold px-4 py-2 text-sm font-semibold text-[#0f1020] shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isAuthLoading ? "Signing in..." : "Login with Pi"}
+              {isAuthLoading ? "Signing in..." : "Sign in with Pi"}
             </button>
           </div>
 
@@ -325,6 +432,14 @@ export default function Home() {
                   {serverUser ? "Verified" : "Waiting on server"}
                 </span>
               </div>
+            ) : (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+                <p>Sign in with Pi to personalize “You owe” vs “Owed to you” lists and to settle IOUs.</p>
+              </div>
+            )}
+            {authError ? <p className="text-sm text-red-300">{authError}</p> : null}
+          </div>
+        </div>
 
               <p>ID: {(serverUser ?? authResult.user)?.uid}</p>
               <p>Username: {(serverUser ?? authResult.user)?.username}</p>
@@ -347,6 +462,14 @@ export default function Home() {
           <p className="text-xs text-slate-400">
             The SDK handles Pioneer identity; do not roll your own auth or bypass Pi Network policies.
           </p>
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-200">
+            {iouModelFields.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <div className="mt-4 rounded-lg border border-piGold/50 bg-piGold/10 p-4 text-sm text-piGold">
+            Sandbox stays on (<code className="bg-white/10 px-1">NEXT_PUBLIC_PI_SANDBOX=true</code>). Replace the validation key via env to publish <code className="bg-white/10 px-1">/.well-known/pi-validation.txt</code> automatically.
+          </div>
         </div>
       </section>
 
@@ -375,34 +498,78 @@ export default function Home() {
                 ))}
               </div>
             </div>
-
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-200" htmlFor="amount">
-                Amount in {currencySymbols[sourceCurrency]} {sourceCurrency.toUpperCase()}
-              </label>
+            <span className="pill text-xs text-slate-100">Open IOUs: {totals.open}</span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-300">Creditor (receives Pi)</span>
               <input
-                id="amount"
-                type="number"
-                min={0}
-                step={0.01}
-                value={amount}
-                onChange={(event) => setAmount(Number(event.target.value) || 0)}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-lg text-white outline-none transition focus:border-piGold focus:ring-2 focus:ring-piGold/60"
+                value={newCreditor}
+                onChange={(event) => setNewCreditor(event.target.value)}
+                className="rounded-lg border border-white/15 bg-white/5 p-2 text-white"
+                placeholder="pi-username"
               />
-            </div>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-300">Debtor (owes Pi)</span>
+              <input
+                value={newDebtor}
+                onChange={(event) => setNewDebtor(event.target.value)}
+                className="rounded-lg border border-white/15 bg-white/5 p-2 text-white"
+                placeholder="pi-username"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-300">Amount (Pi)</span>
+              <input
+                type="number"
+                value={newAmount}
+                onChange={(event) => setNewAmount(Number(event.target.value))}
+                className="rounded-lg border border-white/15 bg-white/5 p-2 text-white"
+                step="0.01"
+                min="0"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm md:col-span-2">
+              <span className="text-slate-300">Reason</span>
+              <input
+                value={newNote}
+                onChange={(event) => setNewNote(event.target.value)}
+                className="rounded-lg border border-white/15 bg-white/5 p-2 text-white"
+                placeholder="Why this IOU exists"
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCreateIou}
+              className="rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 transition hover:ring-piGold/80"
+            >
+              Create IOU
+            </button>
+            <span className="text-xs text-slate-300">It will appear below with status set to open.</span>
+          </div>
+        </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {conversions.map(({ target, rate, value }) => (
-                <div key={target} className="glass-card border-white/10 p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm uppercase tracking-[0.2em] text-slate-300">{currencySymbols[target]}</p>
-                      <p className="text-xl font-bold">{value.toFixed(2)}</p>
-                    </div>
-                    <p className="text-sm text-slate-300">1 {currencySymbols[sourceCurrency]} ≈ {rate} {currencySymbols[target]}</p>
-                  </div>
-                </div>
-              ))}
+        <div className="glass-card p-6 md:p-7">
+          <p className="text-sm uppercase tracking-[0.2em] text-piGold">Your position</p>
+          <h2 className="text-2xl font-semibold">You owe vs owed to you</h2>
+          <p className="text-sm text-slate-300">Based only on Pi sign-in. Every card shows actors, Pi amount, and state.</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+              <p className="flex items-center justify-between text-slate-100">
+                <span>You owe</span>
+                <span className="pill text-[10px] text-slate-100">{formatAmount(totals.youOwe)}</span>
+              </p>
+              <p className="mt-1 text-xs text-slate-400">Debts where you are the debtor.</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+              <p className="flex items-center justify-between text-slate-100">
+                <span>Owed to you</span>
+                <span className="pill text-[10px] text-slate-100">{formatAmount(totals.owedToYou)}</span>
+              </p>
+              <p className="mt-1 text-xs text-slate-400">Credits where you are the creditor.</p>
             </div>
 
             <p className="text-sm text-slate-300">
@@ -410,6 +577,7 @@ export default function Home() {
             </p>
           </div>
         </div>
+      </section>
 
         <div className="glass-card flex flex-col gap-5 p-6 md:p-7">
           <p className="text-sm uppercase tracking-[0.25em] text-piGold">Pi launch checklist</p>
@@ -432,24 +600,15 @@ export default function Home() {
             </ul>
           </div>
         </div>
-      </section>
 
-      <section className="grid gap-6 md:grid-cols-[1.1fr_0.9fr]">
-        <div className="glass-card flex flex-col gap-4 p-6 md:p-7">
+        <div className="glass-card p-6 md:p-7">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-piGold">Transactions</p>
               <h2 className="text-xl font-semibold">Send Pi or Test-Pi</h2>
               <p className="text-xs text-slate-300">Callback messages are visible for reviewers—no hidden steps.</p>
             </div>
-            <button
-              type="button"
-              onClick={handlePayment}
-              disabled={isPaymentLoading}
-              className="rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 transition hover:ring-piGold/80 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isPaymentLoading ? "Processing..." : "Create payment"}
-            </button>
+            {activePaymentId ? <span className="pill text-xs text-slate-100">ID: {activePaymentId}</span> : <span className="pill text-xs text-slate-100">No active payment</span>}
           </div>
 
           <p className="text-sm text-slate-200">
@@ -459,30 +618,14 @@ export default function Home() {
           <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-slate-300">
             Client-side only by design—pair this UI with your server to log receipts and keep sensitive keys away from the browser.
           </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-100" htmlFor="payment-amount">
-                Amount to send
-              </label>
-              <input
-                id="payment-amount"
-                type="number"
-                min={0.01}
-                step={0.01}
-                value={paymentAmount}
-                onChange={(event) => setPaymentAmount(Number(event.target.value) || 0.01)}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:border-piGold focus:ring-2 focus:ring-piGold/60"
-              />
-              <p className="text-xs text-slate-400">Use test amounts until your server-side approval logic is live.</p>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-              <p className="font-semibold text-piGold">Server reminders</p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-300">
-                <li>Approve payments with your Pi backend keys.</li>
-                <li>Complete the payment after onReadyForServerApproval.</li>
-                <li>Store receipts securely; never expose secrets client-side.</li>
+          {paymentStatus ? <p className="mt-3 text-sm text-piGold">{paymentStatus}</p> : null}
+          {mockPaymentLog.length ? (
+            <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-4 text-xs text-slate-200">
+              <p className="font-semibold text-slate-100">Payment timeline</p>
+              <ul className="mt-2 space-y-1 text-slate-300">
+                {mockPaymentLog.map((entry, index) => (
+                  <li key={`${entry}-${index}`}>{entry}</li>
+                ))}
               </ul>
             </div>
           </div>
@@ -508,7 +651,9 @@ export default function Home() {
 
           {paymentStatus ? <p className="text-sm text-piGold">{paymentStatus}</p> : null}
         </div>
+      </section>
 
+      <section className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
         <div className="glass-card p-6 md:p-7">
           <p className="text-sm uppercase tracking-[0.2em] text-piGold">Safety + compliance</p>
           <h2 className="text-xl font-semibold">Stay aligned with Pi Network</h2>
@@ -535,37 +680,24 @@ export default function Home() {
         ))}
       </section>
 
-      <section className="glass-card space-y-4 p-6 md:p-8">
-        <h2 className="text-2xl font-semibold">Policies and terms for Pi compliance</h2>
-        <p className="text-sm text-slate-200">
-          This demo stays aligned with the Pi Network developer start guide: keep everything in English, publish your validation
-          key, and make your operating terms transparent for Pioneers.
-        </p>
-        <ul className="list-disc space-y-2 pl-5 text-sm text-slate-300">
-          <li>
-            Validation: the official key is served from <code className="rounded bg-white/10 px-1">/.well-known/pi-validation.txt</code>
-            so the Pi Browser and Vercel deployment can verify ownership without extra routing.
-          </li>
-          <li>
-            Privacy Policy: no personal data is stored by default; if you add analytics or wallet calls, disclose the provider,
-            retention period, and opt-out steps directly on this page.
-          </li>
-          <li>
-            Terms of Use: this interface is for demonstration and educational purposes. Custom integrations (e.g., payments or
-            payouts) must follow Pi Network rules, respect user consent, and avoid custodial handling of Pioneer funds.
-          </li>
-          <li>
-            Safety: keep content Pi-friendly, avoid prohibited products, and confirm all third-party APIs use HTTPS with
-            predictable CORS behavior for Pi Browser compatibility.
-          </li>
-        </ul>
-        <div className="flex flex-wrap gap-3 text-sm text-piGold">
-          <a className="rounded-lg border border-piGold/40 bg-piGold/10 px-3 py-2 font-semibold hover:border-piGold" href="/terms">
-            View Terms of Use
-          </a>
-          <a className="rounded-lg border border-piGold/40 bg-piGold/10 px-3 py-2 font-semibold hover:border-piGold" href="/privacy">
-            View Privacy Policy
-          </a>
+        <div className="glass-card space-y-3 p-6 md:p-8">
+          <h2 className="text-2xl font-semibold">Policies + trust</h2>
+          <p className="text-sm text-slate-200">
+            Every interaction is intentionally simple: English-only copy, transparent validation file, and Pi-only permissions (username + payments). No placeholders or hidden flows.
+          </p>
+          <ul className="list-disc space-y-2 pl-5 text-sm text-slate-300">
+            {complianceBullets.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-3 text-sm text-piGold">
+            <a className="rounded-lg border border-piGold/40 bg-piGold/10 px-3 py-2 font-semibold hover:border-piGold" href="/terms">
+              View Terms of Use
+            </a>
+            <a className="rounded-lg border border-piGold/40 bg-piGold/10 px-3 py-2 font-semibold hover:border-piGold" href="/privacy">
+              View Privacy Policy
+            </a>
+          </div>
         </div>
       </section>
     </main>
