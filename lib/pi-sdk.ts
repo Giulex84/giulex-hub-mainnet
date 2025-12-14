@@ -59,7 +59,10 @@ export function detectPiSdk(): { sdk: PiNetwork | null; isPiBrowser: boolean } {
   };
 }
 
-export function initializePiSdk(sdk: PiNetwork | null): void {
+let piSdkInitialized = false;
+
+function initPiSdkIfNeeded(sdk: PiNetwork | null): void {
+  if (piSdkInitialized) return;
   if (!sdk?.init) return;
 
   const useSandbox = process.env.NEXT_PUBLIC_PI_SANDBOX === "true";
@@ -69,6 +72,12 @@ export function initializePiSdk(sdk: PiNetwork | null): void {
     sandbox: useSandbox,
     appId: process.env.NEXT_PUBLIC_PI_APP_ID
   });
+
+  piSdkInitialized = true;
+}
+
+export function initializePiSdk(sdk: PiNetwork | null): void {
+  initPiSdkIfNeeded(sdk);
 }
 
 async function ensurePiSdk(): Promise<PiNetwork> {
@@ -85,6 +94,7 @@ export async function authenticateWithPi(
   onIncompletePaymentFound?: (payment: PiPayment) => void
 ): Promise<PiAuthResult> {
   const sdk = await ensurePiSdk();
+  initPiSdkIfNeeded(sdk);
   return sdk.authenticate(["username", "payments"], onIncompletePaymentFound);
 }
 
