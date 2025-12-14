@@ -124,7 +124,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const targetId = view === "create" ? "crea" : view === "list" ? "list" : view === "detail" ? "detail" : "top";
+    const targetId = view === "create" ? "create" : view === "list" ? "list" : view === "detail" ? "detail" : "top";
     const element = typeof document !== "undefined" ? document.getElementById(targetId) : null;
 
     if (element) {
@@ -329,7 +329,7 @@ export default function Home() {
         setPaymentStatus(`Payment ${payment.identifier} created. Follow the server prompts.`);
 
         setActivePaymentId(payment.identifier);
-        appendMockLog(`Cliente: creato ${payment.identifier}`);
+        appendMockLog(`Client: created ${payment.identifier}`);
 
         try {
           await syncMockPayment(payment.identifier, "init", payment.amount, payment.memo);
@@ -353,11 +353,11 @@ export default function Home() {
         <div>
           <p className="text-sm text-piGold">{directionLabels[iou.direction]}</p>
           <h3 className="text-2xl font-bold">{iou.amount} Pi</h3>
-          <p className="text-sm text-slate-300">Controparte: {iou.counterparty}</p>
-        </div>
-        <span className="pill text-xs">{statusLabels[iou.status]}</span>
+          <p className="text-sm text-slate-300">Counterparty: {iou.counterparty}</p>
       </div>
-      {iou.note ? <p className="text-sm text-slate-200">Nota: {iou.note}</p> : null}
+      <span className="pill text-xs">{statusLabels[iou.status]}</span>
+    </div>
+    {iou.note ? <p className="text-sm text-slate-200">Note: {iou.note}</p> : null}
       <div className="flex flex-wrap gap-3 text-xs text-slate-400">
         <span>Created: {formatDate(iou.createdAt)}</span>
         <span>Due date: {formatDate(iou.dueDate)}</span>
@@ -516,7 +516,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="crea" className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
+      <section id="create" className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
         <form onSubmit={handleCreateIou} className="glass-card flex flex-col gap-4 p-6">
           <p className="text-sm uppercase tracking-[0.2em] text-piGold">Create IOU</p>
           <h2 className="text-2xl font-semibold">Make a new promise</h2>
