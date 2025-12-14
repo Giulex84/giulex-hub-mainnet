@@ -399,7 +399,6 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
         <div className="glass-card p-6 md:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
