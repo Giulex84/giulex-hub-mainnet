@@ -33,20 +33,23 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from("ious")
-    .insert({
-      pi_uid,
-      direction,
-      counterparty,
-      amount,
-      note,
-      status: "pending"
-    })
-    .select("*")
-    .maybeSingle();
+    .insert(
+      {
+        pi_uid,
+        direction,
+        counterparty,
+        amount,
+        note,
+        status: "pending"
+      },
+      { returning: "representation" }
+    );
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data ?? null);
+  const inserted = Array.isArray(data) ? data[0] : data;
+
+  return NextResponse.json(inserted ?? null);
 }
