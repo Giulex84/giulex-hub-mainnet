@@ -128,6 +128,8 @@ export default function Home() {
 
   const [ious, setIous] = useState<Iou[]>(placeholderIous);
   const [selectedIouId, setSelectedIouId] = useState<string | null>(placeholderIous[0]?.id ?? null);
+  const [hasFetchedIous, setHasFetchedIous] = useState(false);
+  const [isIousLoading, setIsIousLoading] = useState(false);
   const [view, setView] = useState<"home" | "create" | "list" | "detail">("home");
 
   const [formAmount, setFormAmount] = useState<string>("");
@@ -168,8 +170,22 @@ export default function Home() {
       }
     } catch {
       // Fallback to placeholders on network errors.
+    } finally {
+      setIsIousLoading(false);
+      setHasFetchedIous(true);
     }
   };
+
+  const piUid = useMemo(() => serverUser?.uid ?? authResult?.user?.uid ?? null, [authResult?.user?.uid, serverUser?.uid]);
+
+  useEffect(() => {
+    if (!piUid || hasFetchedIous) return;
+
+    fetchPersistedIous(piUid).catch(() => {
+      setIsIousLoading(false);
+      setHasFetchedIous(true);
+    });
+  }, [piUid, hasFetchedIous]);
 
   const upsertPiUser = async (user: PiAuthResult["user"]) => {
     try {
@@ -715,12 +731,13 @@ export default function Home() {
       </section>
 
       <section id="list" className="glass-card space-y-4 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm uppercase tracking-[0.2em] text-piGold">My IOUs</p>
-              <h2 className="text-2xl font-semibold">Quick overview</h2>
-            </div>
-            <div className="flex gap-2 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-piGold">My IOUs</p>
+            <h2 className="text-2xl font-semibold">Quick overview</h2>
+            {isIousLoading ? <p className="text-sm text-slate-300">Loading your promises...</p> : null}
+          </div>
+          <div className="flex gap-2 text-sm">
             <button
               type="button"
               onClick={() => setView("create")}
