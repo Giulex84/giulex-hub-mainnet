@@ -40,11 +40,13 @@ export async function POST(request: Request) {
       amount,
       note,
       status: "pending"
-    });
+    })
+    .select("*")
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data?.[0] ?? null);
+  return NextResponse.json(data ?? null);
 }
