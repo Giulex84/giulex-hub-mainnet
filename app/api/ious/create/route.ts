@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     typeof body?.amount === "number"
       ? body.amount
       : typeof body?.amount === "string"
-        ? Number(body.amount)
+        ? Number(body.amount.replace(/,/g, "."))
         : NaN;
   const note = typeof body?.note === "string" && body.note.trim() ? body.note.trim() : null;
   const due_date = typeof body?.due_date === "string" && body.due_date.trim() ? body.due_date.trim() : null;
@@ -52,7 +52,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid direction value." }, { status: 400 });
   }
 
-  const supabase = getSupabaseServerClient();
+  let supabase;
+
+  try {
+    supabase = getSupabaseServerClient();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to initialize database client.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   const payload: IouInsert = {
     pi_uid,
@@ -64,14 +71,28 @@ export async function POST(request: Request) {
     status: "pending"
   };
 
-  const { data, error } = await supabase.from("ious").insert(payload);
+  try {
+    const { data, error } = await supabase
+      .from("ious")
+      .insert(payload)
+      .select()
+      .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const inserted = (Array.isArray(data) ? data[0] : data) as Partial<IouInsert> | null;
+    const created_at = inserted?.created_at ?? new Date().toISOString();
+
+    return NextResponse.json({
+      ...payload,
+      ...inserted,
+      id: inserted?.id ?? payload.id ?? `${pi_uid}-${created_at}`,
+      created_at
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const inserted = (Array.isArray(data) ? data[0] : data) as Partial<IouInsert> | null;
-  const fallbackCreatedAt = inserted?.created_at || new Date().toISOString();
-
-  return NextResponse.json({ ...payload, ...inserted, created_at: fallbackCreatedAt });
 }
