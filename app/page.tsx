@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   authenticateWithPi,
@@ -89,6 +89,31 @@ const placeholderIous: Iou[] = [
   }
 ];
 
+const GUEST_UID_STORAGE_KEY = "pi-guest-uid";
+
+function generateGuestUid() {
+  const randomSegment =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  return `guest:${randomSegment}`;
+}
+
+function ensureGuestUid() {
+  if (typeof window === "undefined") return null;
+
+  const storedUid = window.localStorage.getItem(GUEST_UID_STORAGE_KEY)?.trim();
+
+  if (storedUid?.startsWith("guest:")) {
+    return storedUid;
+  }
+
+  const newUid = generateGuestUid();
+  window.localStorage.setItem(GUEST_UID_STORAGE_KEY, newUid);
+  return newUid;
+}
+
 function formatDate(value?: string) {
   if (!value) return "—";
   const date = new Date(value);
@@ -121,6 +146,7 @@ export default function Home() {
   const [piStatus, setPiStatus] = useState("Checking the Pi environment...");
   const [authResult, setAuthResult] = useState<PiAuthResult | null>(null);
   const [serverUser, setServerUser] = useState<PiAuthResult["user"] | null>(null);
+  const [guestPiUid, setGuestPiUid] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [activePaymentId, setActivePaymentId] = useState<string | null>(null);
@@ -131,7 +157,7 @@ export default function Home() {
 
   const [ious, setIous] = useState<Iou[]>(placeholderIous);
   const [selectedIouId, setSelectedIouId] = useState<string | null>(placeholderIous[0]?.id ?? null);
-  const [hasFetchedIous, setHasFetchedIous] = useState(false);
+  const [fetchedPiUid, setFetchedPiUid] = useState<string | null>(null);
   const [isIousLoading, setIsIousLoading] = useState(false);
   const [view, setView] = useState<"home" | "create" | "list" | "detail">("home");
 
@@ -147,8 +173,8 @@ export default function Home() {
     setSelectedIouId(items[0]?.id ?? null);
   };
 
-  const fetchPersistedIous = async (piUid?: string) => {
-    const targetPiUid = piUid ?? serverUser?.uid ?? authResult?.user?.uid;
+  const fetchPersistedIous = useCallback(async (piUid?: string) => {
+    const targetPiUid = piUid ?? serverUser?.uid ?? authResult?.user?.uid ?? guestPiUid;
 
     if (!targetPiUid) return;
 
@@ -168,20 +194,36 @@ export default function Home() {
       // Fallback to placeholders on network errors.
     } finally {
       setIsIousLoading(false);
-      setHasFetchedIous(true);
+      setFetchedPiUid(targetPiUid);
     }
-  };
+  }, [authResult?.user?.uid, guestPiUid, serverUser?.uid]);
 
-  const piUid = useMemo(() => serverUser?.uid ?? authResult?.user?.uid ?? null, [authResult?.user?.uid, serverUser?.uid]);
+  const piUid = useMemo(
+    () => serverUser?.uid ?? authResult?.user?.uid ?? guestPiUid ?? null,
+    [authResult?.user?.uid, guestPiUid, serverUser?.uid]
+  );
+
+  const isGuestMode = useMemo(() => !authResult && !serverUser, [authResult, serverUser]);
 
   useEffect(() => {
-    if (!piUid || hasFetchedIous) return;
+    if (!piUid || piUid === fetchedPiUid) return;
+
+    setIous([]);
+    setSelectedIouId(null);
+    setIsIousLoading(true);
 
     fetchPersistedIous(piUid).catch(() => {
       setIsIousLoading(false);
-      setHasFetchedIous(true);
+      setFetchedPiUid(piUid);
     });
-  }, [piUid, hasFetchedIous]);
+  }, [fetchPersistedIous, fetchedPiUid, piUid]);
+
+  useEffect(() => {
+    if (serverUser?.uid || authResult?.user?.uid) return;
+
+    const guestId = ensureGuestUid();
+    setGuestPiUid(guestId);
+  }, [authResult?.user?.uid, serverUser?.uid]);
 
   const upsertPiUser = async (user: PiAuthResult["user"]) => {
     try {
@@ -300,10 +342,14 @@ export default function Home() {
       setPaymentStatus("Add an amount and who you owe to create the IOU.");
       return;
     }
-    const piUserId = piUid;
+    const piUserId = piUid ?? ensureGuestUid();
+
+    if (piUserId && !guestPiUid && piUserId.startsWith("guest:")) {
+      setGuestPiUid(piUserId);
+    }
 
     if (!piUserId) {
-      setPaymentStatus("Sign in with Pi before creating an IOU.");
+      setPaymentStatus("Could not start a guest session. Please reload and try again.");
       return;
     }
 
@@ -654,6 +700,12 @@ export default function Home() {
           <p className="text-sm uppercase tracking-[0.2em] text-piGold">Create IOU</p>
           <h2 className="text-2xl font-semibold">Create a promise</h2>
 
+          {isGuestMode ? (
+            <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-slate-200">
+              You are using guest mode. Pi login is required only for payments.
+            </p>
+          ) : null}
+
           <label className="space-y-2 text-sm font-medium text-slate-200">
             Amount (in Pi)
             <input
@@ -794,7 +846,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => handleSettleIou(selectedIou)}
-                  disabled={isPaymentLoading}
+                  disabled={isPaymentLoading || !authResult}
                   className="rounded-lg bg-white/10 px-4 py-2 font-semibold text-white ring-1 ring-white/20 transition hover:ring-piGold/80 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isPaymentLoading ? "Processing..." : "💰 Settle in Pi"}
