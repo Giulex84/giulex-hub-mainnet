@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
   }
 
-  const pi_uid = typeof body?.pi_uid === "string" ? body.pi_uid.trim() : "";
+  const rawPiUid = typeof body?.pi_uid === "string" ? body.pi_uid.trim() : "";
   const direction = body?.direction;
   const counterparty =
     typeof body?.counterparty === "string" && body.counterparty.trim()
@@ -45,7 +45,27 @@ export async function POST(request: Request) {
   const note = typeof body?.note === "string" && body.note.trim() ? body.note.trim() : null;
   const due_date = typeof body?.due_date === "string" && body.due_date.trim() ? body.due_date.trim() : null;
 
-  if (!pi_uid || !direction || !Number.isFinite(amount) || amount <= 0 || !counterparty) {
+  const isGuest = rawPiUid.startsWith("guest:");
+  const parsedPiUid = (() => {
+    if (!rawPiUid) return "";
+
+    if (isGuest) {
+      return rawPiUid.slice("guest:".length).trim();
+    }
+
+    return rawPiUid;
+  })();
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (
+    !parsedPiUid ||
+    !uuidPattern.test(parsedPiUid) ||
+    !direction ||
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    !counterparty
+  ) {
     return NextResponse.json({ error: "Missing or invalid IOU fields." }, { status: 400 });
   }
 
@@ -63,7 +83,7 @@ export async function POST(request: Request) {
   }
 
   const payload: IouInsert = {
-    pi_uid,
+    pi_uid: isGuest ? rawPiUid : parsedPiUid,
     direction,
     counterparty,
     amount,
@@ -76,20 +96,23 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.from("ious").insert(payload);
 
     if (error) {
+      console.error("Supabase insert error", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     const inserted = Array.isArray(data) ? (data[0] as Partial<IouInsert> | undefined) : null;
     const created_at = inserted?.created_at ?? new Date().toISOString();
-
-    return NextResponse.json({
+    const response = {
       ...payload,
       ...inserted,
-      id: inserted?.id ?? payload.id ?? `${pi_uid}-${created_at}`,
+      id: inserted?.id ?? payload.id ?? `${payload.pi_uid}-${created_at}`,
       created_at
-    });
+    } satisfies IouInsert;
+
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected server error.";
+    console.error("Unexpected IOU create error", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
