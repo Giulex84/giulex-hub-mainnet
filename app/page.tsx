@@ -139,6 +139,8 @@ export default function Home() {
   const [formCounterparty, setFormCounterparty] = useState<string>("");
   const [formNote, setFormNote] = useState<string>("");
   const [formDueDate, setFormDueDate] = useState<string>("");
+  const isWaitingForPiUid = !piUid;
+  const iousToRender = ious.length ? ious : placeholderIous;
 
   const replaceIousWithPersisted = (items: Iou[]) => {
     if (!items.length) return;
@@ -147,7 +149,9 @@ export default function Home() {
     setSelectedIouId(items[0]?.id ?? null);
   };
 
-  const fetchPersistedIous = async (piUid?: string) => {
+  const fe  const fetchPersistedIous = async (piUid?: string) => {
+    const targetPiUid = piUid ?? serverUser?.uid ?? authResult?.user?.uid;
+tchPersistedIous = async (piUid?: string) => {
     const targetPiUid = piUid ?? serverUser?.uid ?? authResult?.user?.uid;
 
     if (!targetPiUid) return;
@@ -226,7 +230,10 @@ export default function Home() {
     }
   }, [view]);
 
-  const selectedIou = useMemo(() => ious.find((iou) => iou.id === selectedIouId) ?? null, [ious, selectedIouId]);
+  const selectedIou = useMemo(
+    () => iousToRender.find((iou) => iou.id === selectedIouId) ?? null,
+    [iousToRender, selectedIouId]
+  );
 
   const appendMockLog = (entry: string) => {
     setMockPaymentLog((previous) => [...previous, entry]);
@@ -746,8 +753,11 @@ export default function Home() {
             </button>
           </div>
         </div>
+        {isWaitingForPiUid ? (
+          <p className="text-sm text-slate-300">Loading your Pi session... showing sample IOUs.</p>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
-          {ious.map((iou) => renderIouCard(iou))}
+          {iousToRender.map((iou) => renderIouCard(iou))}
         </div>
       </section>
 
