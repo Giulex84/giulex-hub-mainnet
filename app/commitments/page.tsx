@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Commitment = {
@@ -7,23 +10,6 @@ type Commitment = {
   description: string;
   status: "Pending" | "Completed" | "Cancelled";
 };
-
-const MOCK_COMMITMENTS: Commitment[] = [
-  {
-    id: "1",
-    author: "giulex",
-    counterparty: "alex",
-    description: "Deliver UI draft for homepage",
-    status: "Pending",
-  },
-  {
-    id: "2",
-    author: "giulex",
-    counterparty: "marco",
-    description: "Review smart contract logic",
-    status: "Completed",
-  },
-];
 
 function StatusBadge({ status }: { status: Commitment["status"] }) {
   const color =
@@ -41,8 +27,15 @@ function StatusBadge({ status }: { status: Commitment["status"] }) {
 }
 
 export default function CommitmentsPage() {
+  const [items, setItems] = useState<Commitment[]>([]);
+
+  useEffect(() => {
+    const raw = localStorage.getItem("commitments");
+    if (raw) setItems(JSON.parse(raw));
+  }, []);
+
   return (
-    <main className="mx-auto max-w-4xl p-6">
+    <main className="mx-auto max-w-4xl p-6 text-white">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Public commitments</h1>
 
@@ -54,34 +47,37 @@ export default function CommitmentsPage() {
         </Link>
       </div>
 
-      <p className="mb-6 text-slate-600">
-        Commitments are public records that help build trust and reputation over
-        time. This platform does not process payments or compensation.
+      <p className="mb-6 text-slate-300">
+        Commitments are public, non-financial records for transparency purposes.
+        No payments or settlements occur on this platform.
       </p>
 
       <div className="space-y-4">
-        {MOCK_COMMITMENTS.map((c) => (
-          <div
-            key={c.id}
-            className="rounded-lg border p-4 flex flex-col gap-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-slate-500">
+        {items.length === 0 && (
+          <div className="text-slate-400 text-sm">
+            No commitments yet.
+          </div>
+        )}
+
+        {items.map((c) => (
+          <div key={c.id} className="rounded-lg border border-slate-700 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm text-slate-400">
                 {c.author} → {c.counterparty}
               </div>
               <StatusBadge status={c.status} />
             </div>
 
-            <div className="text-slate-800">{c.description}</div>
+            <div className="text-slate-200">{c.description}</div>
 
-            <div className="text-xs text-slate-400">
+            <div className="mt-2 text-xs text-slate-500">
               This is a commitment record only. No payments are involved.
             </div>
           </div>
         ))}
       </div>
 
-      <footer className="mt-12 border-t pt-4 text-sm text-slate-500">
+      <footer className="mt-12 border-t border-slate-700 pt-4 text-sm text-slate-400">
         <div className="flex gap-4">
           <Link href="/privacy">Privacy Policy</Link>
           <Link href="/terms">Terms of Service</Link>
