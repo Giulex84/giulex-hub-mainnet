@@ -13,7 +13,9 @@ type Commitment = {
 };
 
 export default function CommitmentDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
+  const id = params.id as string;
+
   const router = useRouter();
   const [item, setItem] = useState<Commitment | null>(null);
 
@@ -21,8 +23,8 @@ export default function CommitmentDetailPage() {
     const raw = localStorage.getItem("commitments");
     if (!raw) return;
 
-    const items: Commitment[] = JSON.parse(raw);
-    const found = items.find((c) => c.id === id);
+    const items = JSON.parse(raw) as Commitment[];
+    const found = items.find((c: Commitment) => c.id === id);
     if (found) setItem(found);
   }, [id]);
 
@@ -32,11 +34,13 @@ export default function CommitmentDetailPage() {
     const raw = localStorage.getItem("commitments");
     if (!raw) return;
 
-    const items: Commitment[] = JSON.parse(raw).map((c) =>
+    const items = JSON.parse(raw) as Commitment[];
+
+    const updated: Commitment[] = items.map((c: Commitment) =>
       c.id === item.id ? { ...c, status: "Completed" } : c
     );
 
-    localStorage.setItem("commitments", JSON.stringify(items));
+    localStorage.setItem("commitments", JSON.stringify(updated));
     router.push("/commitments");
   }
 
@@ -45,7 +49,7 @@ export default function CommitmentDetailPage() {
       <main className="mx-auto max-w-3xl p-6 text-white">
         <p className="text-slate-400">Commitment not found.</p>
         <Link href="/commitments" className="text-indigo-400 underline">
-          Back
+          Back to commitments
         </Link>
       </main>
     );
@@ -60,7 +64,9 @@ export default function CommitmentDetailPage() {
           {item.author} → {item.counterparty}
         </div>
 
-        <div className="text-lg">{item.description}</div>
+        <div className="text-lg text-slate-100">
+          {item.description}
+        </div>
 
         <div className="text-sm text-slate-300">
           Status: <strong>{item.status}</strong>
