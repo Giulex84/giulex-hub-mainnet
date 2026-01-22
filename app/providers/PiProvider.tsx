@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
@@ -13,44 +13,36 @@ export default function PiProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [initialized, setInitialized] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const waitForPi = () => {
       if (window.Pi) {
-        try {
-          window.Pi.init({ version: '2.0' });
+        window.Pi.init({
+          version: "2.0",
+          sandbox: false,
+          onIncompletePaymentFound: (payment: any) => {
+            console.log("Incomplete payment", payment);
+          },
+        });
 
-          window.Pi.authenticate(
-            ['username'],
-            (auth: any) => {
-              console.log('Pi user authenticated:', auth);
-              localStorage.setItem('pi_user', JSON.stringify(auth));
-              setInitialized(true);
-            },
-            (err: any) => {
-              console.error('Pi auth error', err);
-              setInitialized(true); // 🔑 NON bloccare l’app
-            }
-          );
-        } catch (e) {
-          console.error(e);
-          setInitialized(true);
-        }
+        if (!cancelled) setReady(true);
       } else {
         setTimeout(waitForPi, 100);
       }
     };
 
     waitForPi();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  if (!initialized) {
-    return (
-      <div className="p-6 text-slate-400">
-        Authenticating with Pi…
-      </div>
-    );
+  if (!ready) {
+    return <div className="p-6">Authenticating with Pi…</div>;
   }
 
   return <>{children}</>;
