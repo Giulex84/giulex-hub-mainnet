@@ -1,6 +1,11 @@
-import Script from "next/script";
+import type { Metadata } from "next";
 import "./globals.css";
 import PiProvider from "./providers/PiProvider";
+
+export const metadata: Metadata = {
+  title: "Giulex Hub",
+  description: "Giulex Hub mainnet app",
+};
 
 export default function RootLayout({
   children,
@@ -9,11 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <Script
-          src="https://sdk.minepi.com/pi-sdk.js"
-          strategy="afterInteractive"
-        />
+      <body className="min-h-screen">
         <PiProvider>{children}</PiProvider>
       </body>
     </html>
