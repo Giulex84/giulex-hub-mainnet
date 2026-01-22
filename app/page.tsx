@@ -1,3 +1,19 @@
+'use client';
+
+import { useEffect } from 'react';
+
+export default function HomePage() {
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).Pi) {
+      (window as any).Pi.authenticate(
+        ['username'],
+        () => {},
+        () => {}
+      );
+    }
+  }, []);
+
 import Link from "next/link";
 
 export default function HomePage() {
