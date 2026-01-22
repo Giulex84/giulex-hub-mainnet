@@ -1,6 +1,6 @@
-import Script from 'next/script';
-import './globals.css';
-import PiProvider from './providers/PiProvider';
+import Script from "next/script";
+import "./globals.css";
+import PiProvider from "./providers/PiProvider";
 
 export default function RootLayout({
   children,
@@ -9,13 +9,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
+      <body>
         <Script
           src="https://sdk.minepi.com/pi-sdk.js"
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
         />
-      </head>
-      <body className="min-h-screen">
         <PiProvider>{children}</PiProvider>
       </body>
     </html>
