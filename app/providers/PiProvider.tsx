@@ -13,42 +13,44 @@ export default function PiProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [ready, setReady] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-
     const waitForPi = () => {
       if (window.Pi) {
-        window.Pi.init({ version: '2.0' });
+        try {
+          window.Pi.init({ version: '2.0' });
 
-        window.Pi.authenticate(
-          ['username', 'payments'],
-          (auth: any) => {
-            if (!cancelled) {
-              console.log('Pi authenticated:', auth);
+          window.Pi.authenticate(
+            ['username'],
+            (auth: any) => {
+              console.log('Pi user authenticated:', auth);
               localStorage.setItem('pi_user', JSON.stringify(auth));
-              setReady(true);
+              setInitialized(true);
+            },
+            (err: any) => {
+              console.error('Pi auth error', err);
+              setInitialized(true); // 🔑 NON bloccare l’app
             }
-          },
-          (err: any) => {
-            console.error('Pi auth error', err);
-          }
-        );
+          );
+        } catch (e) {
+          console.error(e);
+          setInitialized(true);
+        }
       } else {
         setTimeout(waitForPi, 100);
       }
     };
 
     waitForPi();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  if (!ready) {
-    return <div className="p-6 text-slate-400">Authenticating with Pi…</div>;
+  if (!initialized) {
+    return (
+      <div className="p-6 text-slate-400">
+        Authenticating with Pi…
+      </div>
+    );
   }
 
   return <>{children}</>;
