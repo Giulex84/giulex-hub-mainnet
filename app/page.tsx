@@ -38,6 +38,15 @@ export default function HomePage() {
           <Link href="/terms">Terms of Service</Link>
         </div>
       </footer>
+      <div className="mt-10">
+  <a
+    href="/pay-once"
+    className="text-xs text-slate-500 underline"
+  >
+    Internal test payment
+  </a>
+</div>
+
     </main>
   );
 }
