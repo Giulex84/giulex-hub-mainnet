@@ -1,10 +1,8 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import PiProvider from "./providers/PiProvider";
+import './globals.css';
 
-export const metadata: Metadata = {
-  title: "Giulex Hub",
-  description: "Giulex Hub mainnet app",
+export const metadata = {
+  title: 'Giulex Hub',
+  description: 'Pi Network Mainnet App',
 };
 
 export default function RootLayout({
@@ -14,9 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen">
-        <PiProvider>{children}</PiProvider>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
