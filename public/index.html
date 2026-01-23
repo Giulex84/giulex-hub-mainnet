@@ -5,48 +5,62 @@
   <title>Giulex Hub</title>
 </head>
 <body>
-  <h1>Giulex Hub</h1>
-  <button onclick="auth()">Authenticate</button>
-  <button onclick="pay()">Pay 1 Test-Pi</button>
-  <pre id="log"></pre>
+<h1>Giulex Hub</h1>
+
+<button id="auth">Authenticate</button>
+<button id="pay">Pay 1 Test-Pi</button>
+
+<pre id="log"></pre>
 
 <script src="https://sdk.minepi.com/pi-sdk.js"></script>
 <script>
-Pi.init({ version: "2.0", sandbox: false });
-
 const log = (m) =>
-  document.getElementById("log").textContent += "\n" + JSON.stringify(m, null, 2);
+  document.getElementById("log").textContent +=
+  "\n" + (typeof m === "string" ? m : JSON.stringify(m, null, 2));
 
-async function auth() {
-  const res = await Pi.authenticate(["username", "payments"], () => {}, () => {});
-  log(res);
+if (!window.Pi) {
+  log("❌ Pi SDK NOT LOADED");
+} else {
+  log("✅ Pi SDK loaded");
 }
 
-async function pay() {
+Pi.init({ version: "2.0", sandbox: false });
+
+document.getElementById("auth").onclick = async () => {
+  const res = await Pi.authenticate(["username","payments"], () => {}, () => {});
+  log(res);
+};
+
+document.getElementById("pay").onclick = () => {
+  log("▶ pay() clicked");
+
   Pi.createPayment({
     amount: 1,
     memo: "Giulex Test Payment",
-    metadata: { app: "giulex-hub" },
+    metadata: { test: true },
+
     onReadyForServerApproval: async (paymentId) => {
-      log({ approve: paymentId });
+      log("approve: " + paymentId);
       await fetch("/api/pi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "approve", paymentId }),
       });
     },
+
     onReadyForServerCompletion: async (paymentId, txid) => {
-      log({ complete: paymentId, txid });
+      log("complete: " + paymentId);
       await fetch("/api/pi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "complete", paymentId, txid }),
       });
     },
-    onCancel: (e) => log({ canceled: e }),
-    onError: (e) => log({ error: e }),
+
+    onCancel: (e) => log("❌ canceled"),
+    onError: (e) => log("❌ error " + JSON.stringify(e)),
   });
-}
+};
 </script>
 </body>
 </html>
