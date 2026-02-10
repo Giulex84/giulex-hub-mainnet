@@ -35,26 +35,30 @@
             },
             {
               onReadyForServerApproval: async function (paymentId) {
-                await fetch("/api/pi", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "approve",
-                    paymentId
-                  })
-                });
-              },
+  await fetch("https://logo-five-mu.vercel.app/api/pi", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "approve",
+      paymentId
+    })
+  });
+},
+
 
               onReadyForServerCompletion: async function (paymentId, txid) {
-                await fetch("/api/pi", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "complete",
-                    paymentId,
-                    txid
-                  })
-                });
+  await fetch("https://logo-five-mu.vercel.app/api/pi", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "complete",
+      paymentId,
+      txid
+    })
+  });
+
+  alert("U2A payment completed successfully");
+},
 
                 alert("U2A payment completed successfully");
               },
