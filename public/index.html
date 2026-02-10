@@ -11,12 +11,14 @@
     <button id="loginBtn">Login with Pi</button>
 
     <script>
+      // 🔒 Punto fermo: init sempre
       Pi.init({ version: "2.0" });
 
       const loginBtn = document.getElementById("loginBtn");
 
       loginBtn.addEventListener("click", async () => {
         try {
+          // 🔒 Punto fermo: auth SOLO su click
           const auth = await Pi.authenticate(
             ["username", "payments"],
             function onIncompletePaymentFound(payment) {
@@ -26,7 +28,7 @@
 
           console.log("Auth success:", auth);
 
-          // 🔹 U2A payment — PI SDK (CORRETTO)
+          // ✅ U2A payment – PI SDK (flow corretto)
           Pi.createPayment(
             {
               amount: 1,
@@ -35,30 +37,26 @@
             },
             {
               onReadyForServerApproval: async function (paymentId) {
-  await fetch("https://logo-five-mu.vercel.app/api/pi", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: "approve",
-      paymentId
-    })
-  });
-},
-
+                await fetch("https://logo-five-mu.vercel.app/api/pi", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "approve",
+                    paymentId: paymentId
+                  })
+                });
+              },
 
               onReadyForServerCompletion: async function (paymentId, txid) {
-  await fetch("https://logo-five-mu.vercel.app/api/pi", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: "complete",
-      paymentId,
-      txid
-    })
-  });
-
-  alert("U2A payment completed successfully");
-},
+                await fetch("https://logo-five-mu.vercel.app/api/pi", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "complete",
+                    paymentId: paymentId,
+                    txid: txid
+                  })
+                });
 
                 alert("U2A payment completed successfully");
               },
@@ -73,7 +71,6 @@
               }
             }
           );
-
         } catch (err) {
           console.error("Auth error:", err);
           alert("Authentication failed");
