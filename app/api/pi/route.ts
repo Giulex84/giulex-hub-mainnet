@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const { action, paymentId, txid } = body;
 
   let url = "";
-  let payload: any = {};
+  let payload: any = undefined;
 
   if (action === "approve") {
     url = `${PI_API_URL}/${paymentId}/approve`;
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       Authorization: `Key ${PI_API_KEY}`,
       "Content-Type": "application/json"
     },
-    body: Object.keys(payload).length ? JSON.stringify(payload) : undefined
+    body: payload ? JSON.stringify(payload) : undefined
   });
 
   const data = await res.json();
