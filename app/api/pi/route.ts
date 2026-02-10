@@ -5,10 +5,20 @@ const PI_API_URL = "https://api.minepi.com/v2/payments";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { action, paymentId, txid } = body;
+  const { action, paymentId, txid, amount, memo, metadata, uid } = body;
 
   let url = "";
   let payload: any = {};
+
+  if (action === "create") {
+    url = PI_API_URL;
+    payload = {
+      amount,
+      memo,
+      metadata,
+      uid
+    };
+  }
 
   if (action === "approve") {
     url = `${PI_API_URL}/${paymentId}/approve`;
@@ -16,16 +26,16 @@ export async function POST(req: NextRequest) {
 
   if (action === "complete") {
     url = `${PI_API_URL}/${paymentId}/complete`;
-    payload = { txid };
+    payload = txid ? { txid } : {};
   }
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      "Authorization": `Key ${PI_API_KEY}`,
-      "Content-Type": "application/json",
+      Authorization: `Key ${PI_API_KEY}`,
+      "Content-Type": "application/json"
     },
-    body: Object.keys(payload).length ? JSON.stringify(payload) : undefined,
+    body: Object.keys(payload).length ? JSON.stringify(payload) : undefined
   });
 
   const data = await res.json();
