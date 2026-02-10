@@ -8,7 +8,6 @@
 
   <body>
     <h1>Giulex Hub Mainnet</h1>
-
     <button id="loginBtn">Login with Pi</button>
 
     <script>
@@ -20,54 +19,60 @@
         try {
           const auth = await Pi.authenticate(
             ["username", "payments"],
-            async function onIncompletePaymentFound(payment) {
+            function onIncompletePaymentFound(payment) {
               console.log("Incomplete payment found", payment);
             }
           );
 
           console.log("Auth success:", auth);
 
-          // CREATE U2A payment via backend
-          const createRes = await fetch("/api/pi", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "create",
-              uid: auth.user.uid,
+          // 🔹 U2A payment — PI SDK (CORRETTO)
+          Pi.createPayment(
+            {
               amount: 1,
               memo: "Mainnet U2A checklist step 10",
               metadata: { app: "giulex-hub-mainnet" }
-            })
-          });
+            },
+            {
+              onReadyForServerApproval: async function (paymentId) {
+                await fetch("/api/pi", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "approve",
+                    paymentId
+                  })
+                });
+              },
 
-          const payment = await createRes.json();
-          console.log("Payment created:", payment);
+              onReadyForServerCompletion: async function (paymentId, txid) {
+                await fetch("/api/pi", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "complete",
+                    paymentId,
+                    txid
+                  })
+                });
 
-          // Approve payment
-          await fetch("/api/pi", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "approve",
-              paymentId: payment.identifier
-            })
-          });
+                alert("U2A payment completed successfully");
+              },
 
-          // Complete payment (U2A does not require txid)
-          await fetch("/api/pi", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "complete",
-              paymentId: payment.identifier
-            })
-          });
+              onCancel: function (paymentId) {
+                console.log("Payment cancelled", paymentId);
+              },
 
-          alert("U2A payment completed successfully");
+              onError: function (error, payment) {
+                console.error("Payment error", error, payment);
+                alert("Payment error");
+              }
+            }
+          );
 
         } catch (err) {
-          console.error("Error:", err);
-          alert("Error during Pi flow");
+          console.error("Auth error:", err);
+          alert("Authentication failed");
         }
       });
     </script>
