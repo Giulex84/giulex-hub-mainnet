@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ status: "ok" });
+}
+
 
 const PI_API_KEY = process.env.PI_API_KEY!;
 const PI_API_URL = "https://api.minepi.com/v2/payments";
