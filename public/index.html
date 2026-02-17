@@ -1,81 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Giulex Hub Mainnet</title>
-    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
-  </head>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Giulex Hub – jr.pi</title>
+  <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+  <style>
+    body { font-family: Arial; text-align: center; padding: 30px; }
+    button { padding: 12px 20px; font-size: 16px; margin: 10px; }
+    .box { margin-top: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+    footer { margin-top: 50px; font-size: 14px; }
+  </style>
+</head>
 
-  <body>
-    <h1>Giulex Hub Mainnet</h1>
-    <button id="loginBtn">Login with Pi</button>
+<body>
 
-    <script>
-      // 🔒 Punto fermo: init sempre
-      Pi.init({ version: "2.0" });
+<h1>Giulex Hub</h1>
+<p>Official jr.pi Utility Hub</p>
 
-      const loginBtn = document.getElementById("loginBtn");
+<button id="loginBtn">Login with Pi</button>
 
-      loginBtn.addEventListener("click", async () => {
-        try {
-          // 🔒 Punto fermo: auth SOLO su click
-          const auth = await Pi.authenticate(
-            ["username", "payments"],
-            function onIncompletePaymentFound(payment) {
-              console.log("Incomplete payment found", payment);
-            }
-          );
+<div id="app"></div>
 
-          console.log("Auth success:", auth);
+<footer>
+  <hr>
+  <p>
+    <a href="/privacy.html">Privacy Policy</a> |
+    <a href="/terms.html">Terms of Service</a>
+  </p>
+</footer>
 
-          // ✅ U2A payment – PI SDK (flow corretto)
-          Pi.createPayment(
-            {
-              amount: 1,
-              memo: "Mainnet U2A checklist step 10",
-              metadata: { app: "giulex-hub-mainnet" }
-            },
-            {
-              onReadyForServerApproval: async function (paymentId) {
-                await fetch("https://logo-five-mu.vercel.app/api/pi", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "approve",
-                    paymentId: paymentId
-                  })
-                });
-              },
+<script>
+  Pi.init({ version: "2.0" });
 
-              onReadyForServerCompletion: async function (paymentId, txid) {
-                await fetch("https://logo-five-mu.vercel.app/api/pi", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "complete",
-                    paymentId: paymentId,
-                    txid: txid
-                  })
-                });
+  async function login() {
+    try {
+      const auth = await Pi.authenticate(
+        ["username", "payments", "wallet_address"],
+        onIncompletePaymentFound
+      );
 
-                alert("U2A payment completed successfully");
-              },
+      document.getElementById("loginBtn").style.display = "none";
 
-              onCancel: function (paymentId) {
-                console.log("Payment cancelled", paymentId);
-              },
+      document.getElementById("app").innerHTML = `
+        <div class="box">
+          <h2>Welcome ${auth.user.username}</h2>
+          <p><strong>UID:</strong> ${auth.user.uid}</p>
+          <p><strong>Wallet:</strong> ${auth.user.wallet_address}</p>
+          <p>jr.pi domain is connected to Giulex Hub.</p>
+          <button onclick="engage('${auth.user.uid}')">Confirm Engagement</button>
+        </div>
+      `;
 
-              onError: function (error, payment) {
-                console.error("Payment error", error, payment);
-                alert("Payment error");
-              }
-            }
-          );
-        } catch (err) {
-          console.error("Auth error:", err);
-          alert("Authentication failed");
-        }
-      });
-    </script>
-  </body>
+    } catch (err) {
+      alert("Login failed");
+    }
+  }
+
+  async function engage(uid) {
+    await fetch("/api/pi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "engage",
+        uid: uid
+      })
+    });
+
+    alert("Engagement recorded ✔");
+  }
+
+  function onIncompletePaymentFound(payment) {
+    console.log("Incomplete payment:", payment);
+  }
+
+  document.getElementById("loginBtn").addEventListener("click", login);
+</script>
+
+</body>
 </html>
