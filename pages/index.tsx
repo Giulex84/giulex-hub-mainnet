@@ -18,27 +18,14 @@ export default function Home() {
     }
   }, []);
 
-  // ✅ COMPASS FIX ANDROID
-  const startCompass = () => {
-    window.addEventListener("deviceorientationabsolute", handleOrientation, true);
-    window.addEventListener("deviceorientation", handleOrientation, true);
-  };
+  // 🔄 DEMO COMPASS ANIMATION
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setHeading((prev) => (prev + 2) % 360);
+    }, 50);
 
-  const handleOrientation = (event: any) => {
-    let newHeading = 0;
-
-    if (event.webkitCompassHeading) {
-      newHeading = event.webkitCompassHeading;
-    } else if (event.alpha !== null) {
-      newHeading = 360 - event.alpha;
-    }
-
-    setHeading(Math.round(newHeading));
-  };
-
-  const activateCompass = () => {
-    startCompass();
-  };
+    return () => clearInterval(interval);
+  }, []);
 
   const login = async () => {
     try {
@@ -56,7 +43,6 @@ export default function Home() {
     }
   };
 
-  // ✅ PAYMENT ROBUSTO
   const pay = async () => {
     if (!window.Pi || !uid) {
       alert("Open inside Pi Browser and login first");
@@ -70,24 +56,22 @@ export default function Home() {
         {
           amount: 0.1,
           memo: "Giulex Compass Premium",
-          metadata: { type: "premium" },
+          metadata: { type: "premium_demo" },
         },
         {
           onReadyForServerApproval: async (paymentId: string) => {
-            const res = await fetch("/api/pi", {
+            await fetch("/api/pi", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ action: "approve", paymentId }),
             });
-
-            if (!res.ok) throw new Error("Approval failed");
           },
 
           onReadyForServerCompletion: async (
             paymentId: string,
             txid: string
           ) => {
-            const res = await fetch("/api/pi", {
+            await fetch("/api/pi", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -97,79 +81,132 @@ export default function Home() {
               }),
             });
 
-            if (!res.ok) throw new Error("Completion failed");
-
             setPremium(true);
-          },
-
-          onCancel: () => {
-            alert("Payment cancelled");
-          },
-
-          onError: (err: any) => {
-            console.log("PI ERROR:", err);
-            alert("Payment error");
           },
         }
       );
-    } catch (err) {
-      console.log("CATCH ERROR:", err);
+    } catch {
       alert("Payment failed");
     }
 
     setLoading(false);
   };
 
+  const getDirection = () => {
+    const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    return dirs[Math.round(heading / 45) % 8];
+  };
+
   return (
-    <div style={{ textAlign: "center", marginTop: 40, fontFamily: "Arial" }}>
-      <h1>Giulex Compass</h1>
-      <p>Mainnet Utility App</p>
+    <div style={styles.container}>
+      <h1 style={styles.title}>Giulex Compass</h1>
+      <p style={styles.subtitle}>Mainnet Utility App</p>
 
       {!uid ? (
-        <button onClick={login}>Login with Pi</button>
+        <button style={styles.button} onClick={login}>
+          Login with Pi
+        </button>
       ) : (
         <>
-          <button onClick={activateCompass}>Activate Compass</button>
-
           <div
             style={{
-              width: 250,
-              height: 250,
-              borderRadius: "50%",
-              border: "6px solid black",
-              margin: "20px auto",
-              position: "relative",
+              ...styles.compass,
               boxShadow: premium
-                ? "0 0 30px red"
-                : "0 0 10px rgba(0,0,0,0.3)",
+                ? "0 0 40px rgba(255,0,0,0.8)"
+                : "0 0 15px rgba(0,0,0,0.3)",
             }}
           >
             <div
               style={{
-                width: 4,
-                height: 110,
-                background: premium ? "red" : "black",
-                position: "absolute",
-                top: 15,
-                left: "50%",
-                transformOrigin: "bottom center",
+                ...styles.needle,
                 transform: `rotate(${heading}deg)`,
-                transition: "transform 0.2s ease-out",
+                background: premium ? "red" : "black",
               }}
             />
+            <div style={styles.centerDot} />
           </div>
 
           <h2>{heading}°</h2>
+          <h3>{getDirection()}</h3>
 
           {!premium && (
-            <button onClick={pay} disabled={loading}>
+            <button
+              style={styles.premiumButton}
+              onClick={pay}
+              disabled={loading}
+            >
               {loading ? "Processing..." : "Unlock Premium (0.1π)"}
             </button>
           )}
 
-          {premium && <p>Premium Active 🧭</p>}
+          {premium && (
+            <p style={styles.badge}>
+              Premium Supporter Active 🧭✨
+            </p>
+          )}
         </>
       )}
     </div>
   );
 }
+
+const styles: any = {
+  container: {
+    textAlign: "center",
+    marginTop: 40,
+    fontFamily: "Arial",
+  },
+  title: {
+    fontSize: 32,
+  },
+  subtitle: {
+    marginBottom: 20,
+  },
+  button: {
+    padding: 12,
+    fontSize: 16,
+    borderRadius: 8,
+    cursor: "pointer",
+  },
+  compass: {
+    width: 260,
+    height: 260,
+    borderRadius: "50%",
+    border: "8px solid black",
+    margin: "30px auto",
+    position: "relative",
+    transition: "box-shadow 0.3s ease",
+  },
+  needle: {
+    width: 4,
+    height: 120,
+    position: "absolute",
+    top: 20,
+    left: "50%",
+    transformOrigin: "bottom center",
+    transition: "transform 0.1s linear",
+  },
+  centerDot: {
+    width: 16,
+    height: 16,
+    borderRadius: "50%",
+    background: "black",
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+  },
+  premiumButton: {
+    marginTop: 20,
+    padding: 14,
+    borderRadius: 8,
+    background: "black",
+    color: "white",
+    cursor: "pointer",
+  },
+  badge: {
+    marginTop: 20,
+    fontWeight: "bold",
+    color: "red",
+  },
+};
