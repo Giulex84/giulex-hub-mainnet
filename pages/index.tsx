@@ -6,11 +6,40 @@ declare global {
   }
 }
 
+const translations: any = {
+  it: {
+    title: "Giulex Memory Quest",
+    login: "Accedi con Pi",
+    selectLang: "Seleziona Lingua",
+    start: "Inizia Gioco",
+    premium: "Sblocca Premium (0.1π)",
+    score: "Punteggio",
+    win: "Hai vinto!",
+    premiumActive: "Premium Attivo",
+  },
+  en: {
+    title: "Giulex Memory Quest",
+    login: "Login with Pi",
+    selectLang: "Select Language",
+    start: "Start Game",
+    premium: "Unlock Premium (0.1π)",
+    score: "Score",
+    win: "You Win!",
+    premiumActive: "Premium Active",
+  },
+};
+
 export default function Home() {
   const [uid, setUid] = useState<string | null>(null);
-  const [heading, setHeading] = useState<number>(0);
+  const [language, setLanguage] = useState<"it" | "en">("it");
   const [premium, setPremium] = useState(false);
+  const [cards, setCards] = useState<number[]>([]);
+  const [flipped, setFlipped] = useState<number[]>([]);
+  const [matched, setMatched] = useState<number[]>([]);
+  const [score, setScore] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  const t = translations[language];
 
   useEffect(() => {
     if (window.Pi) {
@@ -18,132 +47,141 @@ export default function Home() {
     }
   }, []);
 
-  // 🔄 DEMO COMPASS ANIMATION
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setHeading((prev) => (prev + 2) % 360);
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, []);
-
   const login = async () => {
-    try {
-      const scopes = ["username", "payments", "wallet_address"];
-      const auth = await window.Pi.authenticate(scopes, () => {});
-      setUid(auth.user.uid);
+    const scopes = ["username", "payments", "wallet_address"];
+    const auth = await window.Pi.authenticate(scopes, () => {});
+    setUid(auth.user.uid);
 
-      await fetch("/api/pi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "engage", uid: auth.user.uid }),
-      });
-    } catch {
-      alert("Login failed");
+    await fetch("/api/pi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "engage", uid: auth.user.uid }),
+    });
+  };
+
+  const startGame = () => {
+    const size = premium ? 8 : 6;
+    const values = Array.from({ length: size }, (_, i) => i % (size / 2));
+    const shuffled = values.sort(() => Math.random() - 0.5);
+
+    setCards(shuffled);
+    setFlipped([]);
+    setMatched([]);
+    setScore(0);
+  };
+
+  const flipCard = (index: number) => {
+    if (flipped.length === 2 || flipped.includes(index) || matched.includes(index)) return;
+
+    const newFlipped = [...flipped, index];
+    setFlipped(newFlipped);
+
+    if (newFlipped.length === 2) {
+      if (cards[newFlipped[0]] === cards[newFlipped[1]]) {
+        setMatched([...matched, ...newFlipped]);
+        setScore(score + 10);
+      }
+      setTimeout(() => setFlipped([]), 800);
     }
   };
 
   const pay = async () => {
-    if (!window.Pi || !uid) {
-      alert("Open inside Pi Browser and login first");
-      return;
-    }
+    if (!window.Pi || !uid) return;
 
     setLoading(true);
 
-    try {
-      await window.Pi.createPayment(
-        {
-          amount: 0.1,
-          memo: "Giulex Compass Premium",
-          metadata: { type: "premium_demo" },
+    await window.Pi.createPayment(
+      {
+        amount: 0.1,
+        memo: "Giulex Memory Premium",
+        metadata: { type: "memory_premium" },
+      },
+      {
+        onReadyForServerApproval: async (paymentId: string) => {
+          await fetch("/api/pi", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "approve", paymentId }),
+          });
         },
-        {
-          onReadyForServerApproval: async (paymentId: string) => {
-            await fetch("/api/pi", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "approve", paymentId }),
-            });
-          },
-
-          onReadyForServerCompletion: async (
-            paymentId: string,
-            txid: string
-          ) => {
-            await fetch("/api/pi", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "complete",
-                paymentId,
-                txid,
-              }),
-            });
-
-            setPremium(true);
-          },
-        }
-      );
-    } catch {
-      alert("Payment failed");
-    }
+        onReadyForServerCompletion: async (paymentId: string, txid: string) => {
+          await fetch("/api/pi", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "complete", paymentId, txid }),
+          });
+          setPremium(true);
+        },
+      }
+    );
 
     setLoading(false);
   };
 
-  const getDirection = () => {
-    const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-    return dirs[Math.round(heading / 45) % 8];
-  };
-
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>Giulex Compass</h1>
-      <p style={styles.subtitle}>Mainnet Utility App</p>
+      <h1>{t.title}</h1>
+
+      <div style={{ marginBottom: 20 }}>
+        <button onClick={() => setLanguage("it")}>🇮🇹 IT</button>
+        <button onClick={() => setLanguage("en")}>🇬🇧 EN</button>
+      </div>
 
       {!uid ? (
-        <button style={styles.button} onClick={login}>
-          Login with Pi
-        </button>
+        <button onClick={login}>{t.login}</button>
       ) : (
         <>
-          <div
-            style={{
-              ...styles.compass,
-              boxShadow: premium
-                ? "0 0 40px rgba(255,0,0,0.8)"
-                : "0 0 15px rgba(0,0,0,0.3)",
-            }}
-          >
-            <div
-              style={{
-                ...styles.needle,
-                transform: `rotate(${heading}deg)`,
-                background: premium ? "red" : "black",
-              }}
-            />
-            <div style={styles.centerDot} />
+          <button onClick={startGame}>{t.start}</button>
+
+          <h3>{t.score}: {score}</h3>
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: premium ? "repeat(4, 80px)" : "repeat(3, 80px)",
+            gap: 10,
+            justifyContent: "center",
+            marginTop: 20
+          }}>
+            {cards.map((card, index) => (
+              <div
+                key={index}
+                onClick={() => flipCard(index)}
+                style={{
+                  width: 80,
+                  height: 80,
+                  background:
+                    flipped.includes(index) || matched.includes(index)
+                      ? "#fff"
+                      : "#333",
+                  color: "#000",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 24,
+                  cursor: "pointer",
+                  borderRadius: 10,
+                }}
+              >
+                {(flipped.includes(index) || matched.includes(index)) ? card : ""}
+              </div>
+            ))}
           </div>
 
-          <h2>{heading}°</h2>
-          <h3>{getDirection()}</h3>
+          {matched.length === cards.length && cards.length > 0 && (
+            <h2>{t.win}</h2>
+          )}
 
           {!premium && (
             <button
-              style={styles.premiumButton}
               onClick={pay}
               disabled={loading}
+              style={{ marginTop: 20 }}
             >
-              {loading ? "Processing..." : "Unlock Premium (0.1π)"}
+              {loading ? "..." : t.premium}
             </button>
           )}
 
-          {premium && (
-            <p style={styles.badge}>
-              Premium Supporter Active 🧭✨
-            </p>
-          )}
+          {premium && <p>{t.premiumActive} 💎</p>}
         </>
       )}
     </div>
@@ -155,58 +193,5 @@ const styles: any = {
     textAlign: "center",
     marginTop: 40,
     fontFamily: "Arial",
-  },
-  title: {
-    fontSize: 32,
-  },
-  subtitle: {
-    marginBottom: 20,
-  },
-  button: {
-    padding: 12,
-    fontSize: 16,
-    borderRadius: 8,
-    cursor: "pointer",
-  },
-  compass: {
-    width: 260,
-    height: 260,
-    borderRadius: "50%",
-    border: "8px solid black",
-    margin: "30px auto",
-    position: "relative",
-    transition: "box-shadow 0.3s ease",
-  },
-  needle: {
-    width: 4,
-    height: 120,
-    position: "absolute",
-    top: 20,
-    left: "50%",
-    transformOrigin: "bottom center",
-    transition: "transform 0.1s linear",
-  },
-  centerDot: {
-    width: 16,
-    height: 16,
-    borderRadius: "50%",
-    background: "black",
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-  },
-  premiumButton: {
-    marginTop: 20,
-    padding: 14,
-    borderRadius: 8,
-    background: "black",
-    color: "white",
-    cursor: "pointer",
-  },
-  badge: {
-    marginTop: 20,
-    fontWeight: "bold",
-    color: "red",
   },
 };
