@@ -12,6 +12,7 @@ export default function Home() {
   const [heading, setHeading] = useState<number>(0);
   const [premium, setPremium] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [compassActive, setCompassActive] = useState(false);
 
   useEffect(() => {
     if (window.Pi) {
@@ -19,26 +20,33 @@ export default function Home() {
     }
   }, []);
 
-  // Compass logic
-  useEffect(() => {
-    const handleOrientation = (event: any) => {
+  const requestCompassPermission = async () => {
+    if (
+      typeof window.DeviceOrientationEvent !== "undefined" &&
+      typeof (window.DeviceOrientationEvent as any).requestPermission ===
+        "function"
+    ) {
+      const permission = await (window.DeviceOrientationEvent as any).requestPermission();
+      if (permission === "granted") startCompass();
+    } else {
+      startCompass();
+    }
+  };
+
+  const startCompass = () => {
+    setCompassActive(true);
+
+    window.addEventListener("deviceorientation", (event: any) => {
       if (event.alpha !== null) {
         setHeading(Math.round(360 - event.alpha));
       }
-    };
-
-    window.addEventListener("deviceorientation", handleOrientation);
-
-    return () => {
-      window.removeEventListener("deviceorientation", handleOrientation);
-    };
-  }, []);
+    });
+  };
 
   const login = async () => {
     try {
       const scopes = ["username", "payments", "wallet_address"];
-      const auth = await window.Pi.authenticate(scopes, onIncompletePayment);
-
+      const auth = await window.Pi.authenticate(scopes, () => {});
       setUid(auth.user.uid);
 
       await fetch("/api/pi", {
@@ -46,14 +54,17 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "engage", uid: auth.user.uid }),
       });
-
-      alert("Welcome to Giulex Compass 🧭");
     } catch (err) {
-      console.error(err);
+      alert("Login error");
     }
   };
 
   const pay = async () => {
+    if (!window.Pi || !uid) {
+      alert("Apri dal Pi Browser e fai login");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -91,70 +102,136 @@ export default function Home() {
         }
       );
     } catch (err) {
-      console.error(err);
+      alert("Payment failed");
     }
 
     setLoading(false);
   };
 
-  const onIncompletePayment = (payment: any) => {
-    console.log("Incomplete payment", payment);
+  const getDirection = () => {
+    const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    return dirs[Math.round(heading / 45) % 8];
   };
 
   return (
-    <div style={{ textAlign: "center", marginTop: 50 }}>
-      <h1>Giulex Compass</h1>
-      <p>Mainnet Utility App</p>
+    <div style={styles.container}>
+      <h1 style={styles.title}>Giulex Compass</h1>
+      <p style={styles.subtitle}>Mainnet Utility App</p>
 
       {!uid ? (
-        <button onClick={login} style={{ padding: 10 }}>
+        <button style={styles.button} onClick={login}>
           Login with Pi
         </button>
       ) : (
         <>
-          <div style={{ marginTop: 40 }}>
+          {!compassActive && (
+            <button style={styles.activateButton} onClick={requestCompassPermission}>
+              Activate Compass
+            </button>
+          )}
+
+          <div
+            style={{
+              ...styles.compass,
+              boxShadow: premium
+                ? "0 0 30px rgba(255,0,0,0.7)"
+                : "0 0 10px rgba(0,0,0,0.2)",
+            }}
+          >
             <div
               style={{
-                width: 200,
-                height: 200,
-                margin: "auto",
-                borderRadius: "50%",
-                border: "5px solid black",
-                position: "relative",
+                ...styles.needle,
+                transform: `rotate(${heading}deg)`,
+                background: premium ? "red" : "gray",
               }}
-            >
-              <div
-                style={{
-                  width: 2,
-                  height: 90,
-                  background: premium ? "red" : "gray",
-                  position: "absolute",
-                  top: 10,
-                  left: "50%",
-                  transform: `rotate(${heading}deg) translateX(-50%)`,
-                  transformOrigin: "bottom center",
-                }}
-              />
-            </div>
-
-            <h2>{heading}°</h2>
-
-            {!premium && (
-              <button
-                onClick={pay}
-                disabled={loading}
-                style={{ marginTop: 20 }}
-              >
-                {loading
-                  ? "Processing..."
-                  : "Unlock Premium Compass (0.1π)"}
-              </button>
-            )}
-
-            {premium && <p>Premium Supporter Badge 🏅</p>}
+            />
+            <div style={styles.centerDot} />
           </div>
+
+          <h2 style={styles.degree}>{heading}°</h2>
+          <h3>{getDirection()}</h3>
+
+          {!premium && (
+            <button
+              style={styles.premiumButton}
+              onClick={pay}
+              disabled={loading}
+            >
+              {loading ? "Processing..." : "Unlock Premium (0.1π)"}
+            </button>
+          )}
+
+          {premium && <p style={styles.badge}>Premium Supporter 🏅</p>}
         </>
       )}
     </div>
   );
 }
+
+const styles: any = {
+  container: {
+    textAlign: "center",
+    marginTop: 40,
+    fontFamily: "Arial",
+  },
+  title: {
+    fontSize: 32,
+  },
+  subtitle: {
+    marginBottom: 20,
+  },
+  button: {
+    padding: 12,
+    fontSize: 16,
+    borderRadius: 8,
+    cursor: "pointer",
+  },
+  activateButton: {
+    padding: 10,
+    marginBottom: 20,
+    borderRadius: 6,
+  },
+  compass: {
+    width: 240,
+    height: 240,
+    borderRadius: "50%",
+    border: "6px solid black",
+    margin: "20px auto",
+    position: "relative",
+    transition: "box-shadow 0.3s ease",
+  },
+  needle: {
+    width: 4,
+    height: 100,
+    position: "absolute",
+    top: 20,
+    left: "50%",
+    transformOrigin: "bottom center",
+    transition: "transform 0.2s ease-out",
+  },
+  centerDot: {
+    width: 14,
+    height: 14,
+    borderRadius: "50%",
+    background: "black",
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+  },
+  degree: {
+    marginTop: 10,
+  },
+  premiumButton: {
+    marginTop: 20,
+    padding: 12,
+    borderRadius: 8,
+    background: "black",
+    color: "white",
+    cursor: "pointer",
+  },
+  badge: {
+    marginTop: 20,
+    fontWeight: "bold",
+  },
+};
