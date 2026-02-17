@@ -1,79 +1,145 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
-const PI_API_KEY = process.env.PI_API_KEY;
 const PI_API_URL = "https://api.minepi.com/v2/payments";
 
 export async function GET() {
-  return NextResponse.json({ status: "Giulex Hub Mainnet API OK" });
+  return new Response(
+    JSON.stringify({ status: "Giulex Hub Mainnet API OK" }),
+    { status: 200 }
+  );
 }
 
 export async function POST(req: NextRequest) {
   try {
-    if (!PI_API_KEY) {
-      return NextResponse.json(
-        { error: "PI_API_KEY not set in environment variables" },
+    const body = await req.json();
+    const { action } = body;
+
+    if (!process.env.PI_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "PI_API_KEY not configured" }),
         { status: 500 }
       );
     }
 
-    const body = await req.json();
-    const { action, paymentId, txid } = body;
+    /* =============================
+       ENGAGEMENT TRACKING
+       ============================= */
 
-    if (!action || !paymentId) {
-      return NextResponse.json(
-        { error: "Missing action or paymentId" },
-        { status: 400 }
+    if (action === "engage") {
+      console.log("User engaged:", body.uid);
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { status: 200 }
       );
     }
 
-    let url = "";
-    let payload: any = undefined;
+    /* =============================
+       APPROVE PAYMENT
+       ============================= */
 
     if (action === "approve") {
-      url = `${PI_API_URL}/${paymentId}/approve`;
-    }
+      const { paymentId } = body;
 
-    else if (action === "complete") {
-      if (!txid) {
-        return NextResponse.json(
-          { error: "Missing txid for complete action" },
-          { status: 400 }
-        );
+      const response = await fetch(
+        `${PI_API_URL}/${paymentId}/approve`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Key ${process.env.PI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return new Response(JSON.stringify(data), {
+          status: response.status,
+        });
       }
 
-      url = `${PI_API_URL}/${paymentId}/complete`;
-      payload = { txid };
+      return new Response(JSON.stringify(data), {
+        status: 200,
+      });
     }
 
-    else if (action === "cancel") {
-      url = `${PI_API_URL}/${paymentId}/cancel`;
-    }
+    /* =============================
+       COMPLETE PAYMENT
+       ============================= */
 
-    else {
-      return NextResponse.json(
-        { error: "Invalid action" },
-        { status: 400 }
+    if (action === "complete") {
+      const { paymentId, txid } = body;
+
+      const response = await fetch(
+        `${PI_API_URL}/${paymentId}/complete`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Key ${process.env.PI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            txid: txid || null,
+          }),
+        }
       );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return new Response(JSON.stringify(data), {
+          status: response.status,
+        });
+      }
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+      });
     }
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Key ${PI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: payload ? JSON.stringify(payload) : undefined
-    });
+    /* =============================
+       CANCEL PAYMENT
+       ============================= */
 
-    const data = await res.json();
+    if (action === "cancel") {
+      const { paymentId } = body;
 
-    return NextResponse.json(data, { status: res.status });
+      const response = await fetch(
+        `${PI_API_URL}/${paymentId}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Key ${process.env.PI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return new Response(JSON.stringify(data), {
+          status: response.status,
+        });
+      }
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: "Invalid action" }),
+      { status: 400 }
+    );
 
   } catch (error: any) {
-    console.error("PI MAINNET ERROR:", error);
+    console.error("API Error:", error);
 
-    return NextResponse.json(
-      { error: "Internal server error" },
+    return new Response(
+      JSON.stringify({ error: "Internal Server Error" }),
       { status: 500 }
     );
   }
