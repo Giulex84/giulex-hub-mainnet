@@ -21,32 +21,50 @@ export default function Arena() {
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [premium, setPremium] = useState(false);
+
   const [uid, setUid] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const [isPreview, setIsPreview] = useState(true);
   const [canPlay, setCanPlay] = useState(false);
 
+  // -------------------------
+  // AUTH ROBUSTA
+  // -------------------------
   useEffect(() => {
+    let retryCount = 0;
+
+    const tryAuth = () => {
+      if (!window.Pi) return;
+
+      window.Pi.init({ version: "2.0" });
+
+      window.Pi.authenticate(
+        ["username", "payments", "wallet_address"],
+        () => {}
+      )
+        .then((auth: any) => {
+          setUid(auth.user.uid);
+          setUsername(auth.user.username);
+          setAuthReady(true);
+          setAuthLoading(false);
+        })
+        .catch(() => {
+          retryCount++;
+          if (retryCount < 5) {
+            setTimeout(tryAuth, 1000);
+          } else {
+            setAuthLoading(false);
+          }
+        });
+    };
+
     const waitForPi = setInterval(() => {
       if (window.Pi) {
         clearInterval(waitForPi);
-
-        window.Pi.init({ version: "2.0" });
-
-        window.Pi.authenticate(
-          ["username", "payments", "wallet_address"],
-          onIncompletePaymentFound
-        )
-          .then((auth: any) => {
-            setUid(auth.user.uid);
-            setUsername(auth.user.username);
-            setAuthReady(true);
-          })
-          .catch((err: any) => {
-            console.error("Auth error", err);
-          });
+        tryAuth();
       }
     }, 300);
 
@@ -56,9 +74,9 @@ export default function Arena() {
     return () => clearInterval(waitForPi);
   }, []);
 
-  function onIncompletePaymentFound(payment: any) {
-    console.log("Incomplete payment", payment);
-  }
+  // -------------------------
+  // GAME LOGIC
+  // -------------------------
 
   function getGridForLevel(lvl: number) {
     if (lvl === 1) return { rows: 2, cols: 2 };
@@ -91,9 +109,7 @@ export default function Arena() {
     setCanPlay(false);
 
     setTimeout(() => {
-      setCards(prev =>
-        prev.map(c => ({ ...c, flipped: false }))
-      );
+      setCards(prev => prev.map(c => ({ ...c, flipped: false })));
       setIsPreview(false);
       setCanPlay(true);
     }, 1500);
@@ -135,7 +151,6 @@ export default function Arena() {
       if (allMatched) {
         const next = level + 1;
         setLevel(next);
-
         const grid = getGridForLevel(next);
         initGame(grid.rows, grid.cols);
       }
@@ -152,11 +167,11 @@ export default function Arena() {
     setSelected([]);
   }
 
+  // -------------------------
+  // PAYMENT (invariato)
+  // -------------------------
   function unlockPremium() {
-    if (!window.Pi || !uid || !authReady) {
-      alert("Auth not ready");
-      return;
-    }
+    if (!window.Pi || !uid || !authReady) return;
 
     window.Pi.createPayment(
       {
@@ -164,19 +179,13 @@ export default function Arena() {
         memo: "Arena Premium Unlock",
         metadata: { uid },
       },
-
       async (paymentId: string) => {
         await fetch("/api/pi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "approve",
-            paymentId,
-            uid,
-          }),
+          body: JSON.stringify({ action: "approve", paymentId, uid }),
         });
       },
-
       async (paymentId: string, txid: string) => {
         const res = await fetch("/api/pi", {
           method: "POST",
@@ -191,10 +200,8 @@ export default function Arena() {
 
         if (res.ok) {
           setPremium(true);
-          alert("Premium unlocked!");
         }
       },
-
       () => {},
       () => {}
     );
@@ -206,12 +213,25 @@ export default function Arena() {
     <div style={styles.container}>
       <h1 style={styles.title}>ARENA</h1>
 
+      {/* AUTH STATUS */}
+      {authLoading && (
+        <div style={styles.status}>Connecting to Pi...</div>
+      )}
+
+      {authReady && (
+        <div style={styles.status}>
+          Connected as {username}
+        </div>
+      )}
+
       <div style={styles.info}>
         <div>Level {level}</div>
         <div>Score {score}</div>
       </div>
 
-      {isPreview && <div style={styles.preview}>Memorize the cards...</div>}
+      {isPreview && (
+        <div style={styles.preview}>Memorize the cards...</div>
+      )}
 
       <div
         style={{
@@ -238,7 +258,15 @@ export default function Arena() {
       </div>
 
       {!premium && (
-        <button style={styles.button} onClick={unlockPremium}>
+        <button
+          style={{
+            ...styles.button,
+            opacity: authReady ? 1 : 0.5,
+            cursor: authReady ? "pointer" : "not-allowed",
+          }}
+          disabled={!authReady}
+          onClick={unlockPremium}
+        >
           Unlock Premium (0.1 π)
         </button>
       )}
@@ -258,6 +286,10 @@ const styles: any = {
   },
   title: {
     fontSize: "2rem",
+    marginBottom: "10px",
+  },
+  status: {
+    opacity: 0.7,
     marginBottom: "10px",
   },
   info: {
@@ -295,7 +327,6 @@ const styles: any = {
     border: "none",
     color: "#111",
     borderRadius: "6px",
-    cursor: "pointer",
   },
   premium: {
     marginTop: "15px",
