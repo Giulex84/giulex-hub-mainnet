@@ -8,35 +8,34 @@ declare global {
 
 const translations: any = {
   it: {
-    title: "Giulex Memory Quest",
-    login: "Accedi con Pi",
-    selectLang: "Seleziona Lingua",
-    start: "Inizia Gioco",
-    premium: "Sblocca Premium (0.1π)",
+    title: "Giulex Memory Arena",
+    start: "Inizia",
     score: "Punteggio",
-    win: "Hai vinto!",
+    level: "Livello",
+    premium: "Sblocca Premium (0.1π)",
     premiumActive: "Premium Attivo",
+    login: "Accedi con Pi",
   },
   en: {
-    title: "Giulex Memory Quest",
-    login: "Login with Pi",
-    selectLang: "Select Language",
-    start: "Start Game",
-    premium: "Unlock Premium (0.1π)",
+    title: "Giulex Memory Arena",
+    start: "Start",
     score: "Score",
-    win: "You Win!",
+    level: "Level",
+    premium: "Unlock Premium (0.1π)",
     premiumActive: "Premium Active",
+    login: "Login with Pi",
   },
 };
 
 export default function Home() {
   const [uid, setUid] = useState<string | null>(null);
   const [language, setLanguage] = useState<"it" | "en">("it");
-  const [premium, setPremium] = useState(false);
+  const [level, setLevel] = useState(1);
+  const [score, setScore] = useState(0);
   const [cards, setCards] = useState<number[]>([]);
   const [flipped, setFlipped] = useState<number[]>([]);
   const [matched, setMatched] = useState<number[]>([]);
-  const [score, setScore] = useState(0);
+  const [premium, setPremium] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const t = translations[language];
@@ -51,23 +50,19 @@ export default function Home() {
     const scopes = ["username", "payments", "wallet_address"];
     const auth = await window.Pi.authenticate(scopes, () => {});
     setUid(auth.user.uid);
-
-    await fetch("/api/pi", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "engage", uid: auth.user.uid }),
-    });
   };
 
-  const startGame = () => {
-    const size = premium ? 8 : 6;
-    const values = Array.from({ length: size }, (_, i) => i % (size / 2));
-    const shuffled = values.sort(() => Math.random() - 0.5);
+  const generateLevel = () => {
+    let pairs = 3 + level; // aumenta difficoltà
+    if (premium) pairs += 2;
+
+    const values = Array.from({ length: pairs }, (_, i) => i);
+    const doubled = [...values, ...values];
+    const shuffled = doubled.sort(() => Math.random() - 0.5);
 
     setCards(shuffled);
     setFlipped([]);
     setMatched([]);
-    setScore(0);
   };
 
   const flipCard = (index: number) => {
@@ -79,11 +74,23 @@ export default function Home() {
     if (newFlipped.length === 2) {
       if (cards[newFlipped[0]] === cards[newFlipped[1]]) {
         setMatched([...matched, ...newFlipped]);
-        setScore(score + 10);
+        setScore(prev => prev + 10 * level);
       }
-      setTimeout(() => setFlipped([]), 800);
+      setTimeout(() => setFlipped([]), 700);
     }
   };
+
+  useEffect(() => {
+    if (matched.length === cards.length && cards.length > 0) {
+      setTimeout(() => {
+        setLevel(prev => prev + 1);
+      }, 800);
+    }
+  }, [matched]);
+
+  useEffect(() => {
+    generateLevel();
+  }, [level, premium]);
 
   const pay = async () => {
     if (!window.Pi || !uid) return;
@@ -93,8 +100,8 @@ export default function Home() {
     await window.Pi.createPayment(
       {
         amount: 0.1,
-        memo: "Giulex Memory Premium",
-        metadata: { type: "memory_premium" },
+        memo: "Giulex Premium Mode",
+        metadata: { type: "premium_unlock" },
       },
       {
         onReadyForServerApproval: async (paymentId: string) => {
@@ -122,68 +129,50 @@ export default function Home() {
     <div style={styles.container}>
       <h1>{t.title}</h1>
 
-      <div style={{ marginBottom: 20 }}>
-        <button onClick={() => setLanguage("it")}>🇮🇹 IT</button>
-        <button onClick={() => setLanguage("en")}>🇬🇧 EN</button>
+      <div style={styles.lang}>
+        <button onClick={() => setLanguage("it")}>🇮🇹</button>
+        <button onClick={() => setLanguage("en")}>🇬🇧</button>
       </div>
 
-      {!uid ? (
-        <button onClick={login}>{t.login}</button>
-      ) : (
-        <>
-          <button onClick={startGame}>{t.start}</button>
+      {!uid && <button style={styles.login} onClick={login}>{t.login}</button>}
 
-          <h3>{t.score}: {score}</h3>
+      <div style={styles.stats}>
+        <div>{t.level}: {level}</div>
+        <div>{t.score}: {score}</div>
+      </div>
 
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: premium ? "repeat(4, 80px)" : "repeat(3, 80px)",
-            gap: 10,
-            justifyContent: "center",
-            marginTop: 20
-          }}>
-            {cards.map((card, index) => (
-              <div
-                key={index}
-                onClick={() => flipCard(index)}
-                style={{
-                  width: 80,
-                  height: 80,
-                  background:
-                    flipped.includes(index) || matched.includes(index)
-                      ? "#fff"
-                      : "#333",
-                  color: "#000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 24,
-                  cursor: "pointer",
-                  borderRadius: 10,
-                }}
-              >
-                {(flipped.includes(index) || matched.includes(index)) ? card : ""}
-              </div>
-            ))}
+      <div
+        style={{
+          ...styles.grid,
+          gridTemplateColumns: `repeat(${Math.min(6, Math.ceil(Math.sqrt(cards.length)))}, 70px)`
+        }}
+      >
+        {cards.map((card, index) => (
+          <div
+            key={index}
+            onClick={() => flipCard(index)}
+            style={{
+              ...styles.card,
+              background:
+                flipped.includes(index) || matched.includes(index)
+                  ? "#ffffff"
+                  : "#2a2a3b",
+              color: "#000",
+              transform: flipped.includes(index) ? "rotateY(180deg)" : "none",
+            }}
+          >
+            {(flipped.includes(index) || matched.includes(index)) ? card : ""}
           </div>
+        ))}
+      </div>
 
-          {matched.length === cards.length && cards.length > 0 && (
-            <h2>{t.win}</h2>
-          )}
-
-          {!premium && (
-            <button
-              onClick={pay}
-              disabled={loading}
-              style={{ marginTop: 20 }}
-            >
-              {loading ? "..." : t.premium}
-            </button>
-          )}
-
-          {premium && <p>{t.premiumActive} 💎</p>}
-        </>
+      {!premium && (
+        <button style={styles.premium} onClick={pay}>
+          {loading ? "..." : t.premium}
+        </button>
       )}
+
+      {premium && <div style={styles.premiumActive}>💎 {t.premiumActive}</div>}
     </div>
   );
 }
@@ -191,7 +180,53 @@ export default function Home() {
 const styles: any = {
   container: {
     textAlign: "center",
-    marginTop: 40,
+    minHeight: "100vh",
+    background: "linear-gradient(180deg, #0f0f1a, #1a1a2e)",
+    color: "#fff",
+    paddingTop: 40,
     fontFamily: "Arial",
+  },
+  lang: {
+    marginBottom: 15,
+  },
+  login: {
+    padding: 10,
+    marginBottom: 15,
+  },
+  stats: {
+    display: "flex",
+    justifyContent: "space-around",
+    marginBottom: 20,
+    fontSize: 18,
+  },
+  grid: {
+    display: "grid",
+    gap: 10,
+    justifyContent: "center",
+  },
+  card: {
+    width: 70,
+    height: 70,
+    borderRadius: 12,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 22,
+    cursor: "pointer",
+    transition: "0.3s",
+  },
+  premium: {
+    marginTop: 25,
+    padding: 12,
+    borderRadius: 10,
+    background: "#ffcc00",
+    border: "none",
+    fontWeight: "bold",
+    cursor: "pointer",
+  },
+  premiumActive: {
+    marginTop: 20,
+    fontSize: 18,
+    color: "#00ffcc",
   },
 };
