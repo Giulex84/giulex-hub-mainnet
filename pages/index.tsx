@@ -131,7 +131,6 @@ export default function Arena() {
     setSelected([]);
   }
 
-  // 🔥 VERSIONE CORRETTA createPayment
   function unlockPremium() {
     if (!window.Pi || !uid || !authReady) {
       alert("Auth not ready");
@@ -145,9 +144,8 @@ export default function Arena() {
         metadata: { uid },
       },
 
-      // 1️⃣ APPROVE
       async (paymentId: string) => {
-        const approveRes = await fetch("/api/pi", {
+        await fetch("/api/pi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -156,16 +154,10 @@ export default function Arena() {
             uid,
           }),
         });
-
-        if (!approveRes.ok) {
-          const data = await approveRes.json();
-          console.error("Approve failed", data);
-        }
       },
 
-      // 2️⃣ COMPLETE
       async (paymentId: string, txid: string) => {
-        const completeRes = await fetch("/api/pi", {
+        const res = await fetch("/api/pi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -176,21 +168,16 @@ export default function Arena() {
           }),
         });
 
-        if (completeRes.ok) {
+        if (res.ok) {
           setPremium(true);
           alert("Premium unlocked!");
-        } else {
-          const data = await completeRes.json();
-          console.error("Complete failed", data);
         }
       },
 
-      // 3️⃣ CANCEL
       (paymentId: string) => {
         console.log("Payment cancelled", paymentId);
       },
 
-      // 4️⃣ ERROR
       (error: any) => {
         console.error("Payment error", error);
       }
@@ -238,6 +225,29 @@ export default function Arena() {
       )}
 
       {premium && <p style={{ color: "#00ff00" }}>🏆 Premium Active</p>}
+
+      {/* 🔹 FOOTER POLICY LINKS */}
+      <div style={styles.footer}>
+        <a
+          href="/privacy.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={styles.footerLink}
+        >
+          Privacy
+        </a>
+
+        <span style={{ margin: "0 10px" }}>|</span>
+
+        <a
+          href="/terms.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={styles.footerLink}
+        >
+          Terms
+        </a>
+      </div>
     </div>
   );
 }
@@ -278,5 +288,14 @@ const styles: any = {
     color: "white",
     borderRadius: "6px",
     cursor: "pointer",
+  },
+  footer: {
+    marginTop: "30px",
+    fontSize: "12px",
+    opacity: 0.6,
+  },
+  footerLink: {
+    color: "#aaaaaa",
+    textDecoration: "none",
   },
 };
