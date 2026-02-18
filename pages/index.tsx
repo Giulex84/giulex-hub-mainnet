@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 declare global {
   interface Window {
@@ -21,21 +21,57 @@ export default function Arena() {
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [premium, setPremium] = useState(false);
-  const [uid, setUid] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (window.Pi) {
-      window.Pi.init({ version: "2.0" });
-      window.Pi.authenticate(["username"], onIncompletePaymentFound)
-        .then((auth: any) => {
-          setUid(auth.user.uid);
-        });
-    }
-    initGame(4);
+  const [uid, setUid] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const isSandbox = useMemo(() => {
+    return (process.env.NEXT_PUBLIC_PI_SANDBOX || "").toLowerCase() === "true";
   }, []);
 
+  // Scopes "review-safe" per pagamenti + wallet assignment
+  const scopes = useMemo(() => ["username", "payments", "wallet_address"], []);
+
+  useEffect(() => {
+    initGame(4);
+
+    // Aspetta che Pi SDK sia realmente caricato
+    const t = setInterval(() => {
+      if (window.Pi) {
+        clearInterval(t);
+
+        try {
+          window.Pi.init({ version: "2.0", sandbox: isSandbox });
+        } catch (e: any) {
+          // init può lanciare errori se chiamato più volte: non bloccare
+          console.warn("Pi.init warning:", e?.message || e);
+        }
+
+        window.Pi.authenticate(scopes, onIncompletePaymentFound)
+          .then((auth: any) => {
+            setUid(auth?.user?.uid || null);
+            setUsername(auth?.user?.username || null);
+            setAuthReady(true);
+            setAuthError(null);
+            console.log("AUTH OK:", auth);
+          })
+          .catch((err: any) => {
+            console.error("AUTH ERROR:", err);
+            setAuthError(err?.message || "Auth failed");
+            setAuthReady(false);
+          });
+      }
+    }, 250);
+
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSandbox]);
+
   function onIncompletePaymentFound(payment: any) {
-    console.log("Incomplete payment found", payment);
+    // Pi SDK richiede callback per evitare freeze
+    console.log("Incomplete payment found:", payment);
   }
 
   function gridSize() {
@@ -64,80 +100,130 @@ export default function Arena() {
   function handleFlip(card: CardType) {
     if (card.flipped || card.matched || selected.length === 2) return;
 
-    const newCards = cards.map(c =>
-      c.id === card.id ? { ...c, flipped: true } : c
-    );
+    const newCards = cards.map((c) => (c.id === card.id ? { ...c, flipped: true } : c));
     setCards(newCards);
 
     const newSelected = [...selected, { ...card, flipped: true }];
     setSelected(newSelected);
 
     if (newSelected.length === 2) {
-      setTimeout(() => {
-        checkMatch(newSelected);
-      }, 500);
+      setTimeout(() => checkMatch(newSelected), 450);
     }
   }
 
   function checkMatch(selectedCards: CardType[]) {
     const [first, second] = selectedCards;
-    if (first.value === second.value) {
-      setCards(prev =>
-        prev.map(c =>
-          c.value === first.value ? { ...c, matched: true } : c
-        )
-      );
-      setScore(prev => prev + 10);
 
-      const allMatched = cards.every(c => c.matched || c.value === first.value);
+    if (first.value === second.value) {
+      setCards((prev) => prev.map((c) => (c.value === first.value ? { ...c, matched: true } : c)));
+      setScore((prev) => prev + 10);
+
+      // Calcola "allMatched" in modo corretto (usando prev nello stesso update sarebbe meglio,
+      // ma qui è ok perché facciamo check includendo la coppia appena matchata)
+      const allMatched = cards.every((c) => c.matched || c.value === first.value);
       if (allMatched) {
-        setLevel(prev => prev + 1);
+        setLevel((prev) => prev + 1);
         initGame(gridSize());
       }
     } else {
-      setCards(prev =>
-        prev.map(c =>
-          c.id === first.id || c.id === second.id
-            ? { ...c, flipped: false }
-            : c
+      setCards((prev) =>
+        prev.map((c) =>
+          c.id === first.id || c.id === second.id ? { ...c, flipped: false } : c
         )
       );
     }
+
     setSelected([]);
   }
 
   async function unlockPremium() {
-    if (!window.Pi || !uid) return;
+    if (!window.Pi) {
+      alert("Pi SDK not ready");
+      return;
+    }
+    if (!authReady || !uid) {
+      alert("Auth not ready. Open from Pi Browser and retry.");
+      return;
+    }
 
     try {
+      // 1) crea pagamento lato Pi (user approve in wallet)
       const payment = await window.Pi.createPayment({
         amount: 0.1,
         memo: "Arena Premium Unlock",
-        metadata: { uid },
+        metadata: { uid, feature: "premium_unlock" },
       });
 
-      if (payment) {
-        setPremium(true);
-        alert("Premium unlocked!");
+      if (!payment?.identifier) {
+        throw new Error("No payment identifier returned");
       }
-    } catch (e) {
-      alert("Payment failed");
+
+      // 2) APPROVE via backend (Pi API Key server-side)
+      const approveRes = await fetch("/api/pi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "approve",
+          paymentId: payment.identifier,
+          uid,
+        }),
+      });
+
+      const approveData = await approveRes.json();
+      console.log("APPROVE:", approveData);
+
+      if (!approveRes.ok) {
+        // gestione ongoing_payment_found: backend può già auto-cancellare
+        throw new Error(approveData?.error || "Approve failed");
+      }
+
+      // 3) COMPLETE via backend (idempotente)
+      const completeRes = await fetch("/api/pi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "complete",
+          paymentId: payment.identifier,
+          txid: payment.transaction?.txid || null, // se presente
+          uid,
+        }),
+      });
+
+      const completeData = await completeRes.json();
+      console.log("COMPLETE:", completeData);
+
+      if (!completeRes.ok) {
+        throw new Error(completeData?.error || "Complete failed");
+      }
+
+      // ✅ SOLO ORA consegni premium (review-safe)
+      setPremium(true);
+      alert("Premium unlocked!");
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "Payment failed");
     }
   }
 
   return (
     <div style={styles.container}>
       <h1 style={styles.title}>⚔ ARENA ⚔</h1>
+
+      <div style={{ marginBottom: 10, opacity: 0.9 }}>
+        <div>
+          <b>Auth:</b> {authReady ? "OK" : "NOT READY"}
+          {isSandbox ? " (SANDBOX)" : " (PROD)"}
+        </div>
+        {username && <div><b>User:</b> {username}</div>}
+        {uid && <div><b>UID:</b> {uid}</div>}
+        {authError && <div style={{ color: "#ffb3b3" }}><b>Error:</b> {authError}</div>}
+      </div>
+
       <p style={styles.level}>Level {level}</p>
       <p style={styles.score}>Score: {score}</p>
 
-      <div
-        style={{
-          ...styles.grid,
-          gridTemplateColumns: `repeat(${gridSize()}, 1fr)`,
-        }}
-      >
-        {cards.map(card => (
+      <div style={{ ...styles.grid, gridTemplateColumns: `repeat(${gridSize()}, 1fr)` }}>
+        {cards.map((card) => (
           <div
             key={card.id}
             style={{
@@ -197,6 +283,7 @@ const styles: any = {
     borderRadius: "8px",
     cursor: "pointer",
     transition: "0.3s",
+    userSelect: "none",
   },
   button: {
     marginTop: "20px",
