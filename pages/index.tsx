@@ -109,21 +109,61 @@ export default function Arena() {
   async function unlockPremium() {
     if (!window.Pi || !uid) return;
 
-    try {
-      const payment = await window.Pi.createPayment({
+    async function unlockPremium() {
+  if (!window.Pi || !uid) return;
+
+  try {
+    await window.Pi.createPayment(
+      {
         amount: 0.1,
         memo: "Arena Premium Unlock",
         metadata: { uid },
-      });
+      },
+      {
+        onReadyForServerApproval: async (paymentId: string) => {
+          await fetch("/api/pi-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "approve",
+              paymentId,
+            }),
+          });
+        },
 
-      if (payment) {
-        setPremium(true);
-        alert("Premium unlocked!");
+        onReadyForServerCompletion: async (
+          paymentId: string,
+          txid: string
+        ) => {
+          await fetch("/api/pi-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "complete",
+              paymentId,
+              txid,
+            }),
+          });
+
+          setPremium(true);
+          alert("Premium unlocked!");
+        },
+
+        onCancel: (paymentId: string) => {
+          console.log("Payment cancelled", paymentId);
+        },
+
+        onError: (error: any) => {
+          console.error("Payment error", error);
+        },
       }
-    } catch (e) {
-      alert("Payment failed");
-    }
+    );
+  } catch (e) {
+    console.error(e);
+    alert("Payment failed");
   }
+}
+
 
   return (
     <div style={styles.container}>
