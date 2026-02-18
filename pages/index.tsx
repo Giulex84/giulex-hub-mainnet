@@ -137,37 +137,50 @@ export default function Arena() {
   }
 
   async function unlockPremium() {
-    if (!window.Pi) {
-      alert("Pi SDK not ready");
-      return;
-    }
-    if (!authReady || !uid) {
-      alert("Auth not ready. Open from Pi Browser and retry.");
-      return;
-    }
+  if (!window.Pi || !uid) {
+    alert("Auth not ready");
+    return;
+  }
 
-    try {
-      // 1) crea pagamento lato Pi (user approve in wallet)
-      const payment = await window.Pi.createPayment({
+  try {
+    await window.Pi.createPayment(
+      {
         amount: 0.1,
         memo: "Arena Premium Unlock",
-        metadata: { uid, feature: "premium_unlock" },
-      });
+        metadata: { uid },
+      },
 
-      if (!payment?.identifier) {
-        throw new Error("No payment identifier returned");
-      }
+      // 1️⃣ READY FOR SERVER APPROVAL
+      async (paymentId: string) => {
+        console.log("Ready for approval:", paymentId);
 
-      // 2) APPROVE via backend (Pi API Key server-side)
-      const approveRes = await fetch("/api/pi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "approve",
-          paymentId: payment.identifier,
-          uid,
-        }),
-      });
+        const approveRes = await fetch("/api/pi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "approve",
+            paymentId,
+            uid,
+          }),
+        });
+
+        const approveData = await approveRes.json();
+        console.log("APPROVE:", approveData);
+
+        if (!approveRes.ok) {
+          throw new Error(approveData?.error || "Approve failed");
+        }
+      },
+
+      // 2️⃣ READY FOR SERVER COMPLETION
+      async (paymentId: string, txid: string) => {
+        console.log("Ready for completion:", paymentId, txid);
+
+        const completeRes = await fetch("/api/pi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+
 
       const approveData = await approveRes.json();
       console.log("APPROVE:", approveData);
