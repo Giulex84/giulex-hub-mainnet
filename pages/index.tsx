@@ -13,7 +13,7 @@ type CardType = {
   matched: boolean;
 };
 
-const symbols = ["⚔", "🔥", "🛡", "🏹", "👑", "💎", "⚡", "🩸", "🧠", "🐉", "🌑", "☠"];
+const symbols = ["🔥","💎","⚡","🍀","🌟","🎯","🎲","🚀","🎵","🏆"];
 
 export default function Arena() {
   const [cards, setCards] = useState<CardType[]>([]);
@@ -23,25 +23,33 @@ export default function Arena() {
   const [premium, setPremium] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
 
+  // =========================
+  // INIT PI SDK + LOGIN
+  // =========================
   useEffect(() => {
     if (window.Pi) {
       window.Pi.init({ version: "2.0" });
-      window.Pi.authenticate(["username"], onIncompletePaymentFound)
-        .then((auth: any) => {
-          setUid(auth.user.uid);
-        });
+
+      window.Pi.authenticate(
+        ["username"],
+        (payment: any) => {
+          console.log("Incomplete payment found:", payment);
+        }
+      ).then((auth: any) => {
+        setUid(auth.user.uid);
+      });
     }
+
     initGame(4);
   }, []);
 
-  function onIncompletePaymentFound(payment: any) {
-    console.log("Incomplete payment found", payment);
-  }
+  // =========================
+  // GAME LOGIC
+  // =========================
 
   function gridSize() {
     if (level <= 3) return 4;
     if (level <= 6) return 5;
-    if (level <= 9) return 6;
     return 6;
   }
 
@@ -49,6 +57,7 @@ export default function Arena() {
     const pairCount = (size * size) / 2;
     const selectedSymbols = symbols.slice(0, pairCount);
     const doubled = [...selectedSymbols, ...selectedSymbols];
+
     const shuffled = doubled
       .sort(() => Math.random() - 0.5)
       .map((value, index) => ({
@@ -57,6 +66,7 @@ export default function Arena() {
         flipped: false,
         matched: false,
       }));
+
     setCards(shuffled);
     setSelected([]);
   }
@@ -64,107 +74,117 @@ export default function Arena() {
   function handleFlip(card: CardType) {
     if (card.flipped || card.matched || selected.length === 2) return;
 
-    const newCards = cards.map(c =>
+    const updated = cards.map((c) =>
       c.id === card.id ? { ...c, flipped: true } : c
     );
-    setCards(newCards);
 
+    setCards(updated);
     const newSelected = [...selected, { ...card, flipped: true }];
     setSelected(newSelected);
 
     if (newSelected.length === 2) {
-      setTimeout(() => {
-        checkMatch(newSelected);
-      }, 500);
+      setTimeout(() => checkMatch(newSelected), 500);
     }
   }
 
-  function checkMatch(selectedCards: CardType[]) {
-    const [first, second] = selectedCards;
+  function checkMatch(pair: CardType[]) {
+    const [first, second] = pair;
+
     if (first.value === second.value) {
-      setCards(prev =>
-        prev.map(c =>
+      setCards((prev) =>
+        prev.map((c) =>
           c.value === first.value ? { ...c, matched: true } : c
         )
       );
-      setScore(prev => prev + 10);
+      setScore((prev) => prev + 10);
 
-      const allMatched = cards.every(c => c.matched || c.value === first.value);
+      const allMatched = cards.every(
+        (c) => c.matched || c.value === first.value
+      );
+
       if (allMatched) {
-        setLevel(prev => prev + 1);
+        setLevel((prev) => prev + 1);
         initGame(gridSize());
       }
     } else {
-      setCards(prev =>
-        prev.map(c =>
+      setCards((prev) =>
+        prev.map((c) =>
           c.id === first.id || c.id === second.id
             ? { ...c, flipped: false }
             : c
         )
       );
     }
+
     setSelected([]);
   }
 
+  // =========================
+  // PREMIUM PAYMENT
+  // =========================
+
   async function unlockPremium() {
-  if (!window.Pi || !uid) return;
+    if (!window.Pi || !uid) return;
 
-  try {
-    await window.Pi.createPayment(
-      {
-        amount: 0.1,
-        memo: "Arena Premium Unlock",
-        metadata: { uid },
-      },
-      {
-        onReadyForServerApproval: async (paymentId: string) => {
-          await fetch("/api/pi-payment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "approve",
-              paymentId,
-            }),
-          });
+    try {
+      await window.Pi.createPayment(
+        {
+          amount: 0.1,
+          memo: "Arena Premium Unlock",
+          metadata: { uid },
         },
+        {
+          onReadyForServerApproval: async (paymentId: string) => {
+            await fetch("/api/pi-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "approve",
+                paymentId,
+              }),
+            });
+          },
 
-        onReadyForServerCompletion: async (
-          paymentId: string,
-          txid: string
-        ) => {
-          await fetch("/api/pi-payment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "complete",
-              paymentId,
-              txid,
-            }),
-          });
+          onReadyForServerCompletion: async (
+            paymentId: string,
+            txid: string
+          ) => {
+            await fetch("/api/pi-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "complete",
+                paymentId,
+                txid,
+              }),
+            });
 
-          setPremium(true);
-          alert("Premium unlocked!");
-        },
+            setPremium(true);
+            alert("Premium unlocked!");
+          },
 
-        onCancel: (paymentId: string) => {
-          console.log("Payment cancelled", paymentId);
-        },
+          onCancel: (paymentId: string) => {
+            console.log("Payment cancelled:", paymentId);
+          },
 
-        onError: (error: any) => {
-          console.error("Payment error", error);
-        },
-      }
-    );
-  } catch (e) {
-    console.error(e);
-    alert("Payment failed");
+          onError: (error: any) => {
+            console.error("Payment error:", error);
+          },
+        }
+      );
+    } catch (e) {
+      console.error("Payment failed:", e);
+      alert("Payment failed");
+    }
   }
-}
 
+  // =========================
+  // UI
+  // =========================
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>⚔ ARENA ⚔</h1>
+      <h1 style={styles.title}>🔥 ARENA 🔥</h1>
       <p style={styles.level}>Level {level}</p>
       <p style={styles.score}>Score: {score}</p>
 
@@ -174,12 +194,13 @@ export default function Arena() {
           gridTemplateColumns: `repeat(${gridSize()}, 1fr)`,
         }}
       >
-        {cards.map(card => (
+        {cards.map((card) => (
           <div
             key={card.id}
             style={{
               ...styles.card,
-              background: card.flipped || card.matched ? "#b30000" : "#1a1a1a",
+              background:
+                card.flipped || card.matched ? "#b30000" : "#1a1a1a",
             }}
             onClick={() => handleFlip(card)}
           >
@@ -194,28 +215,35 @@ export default function Arena() {
         </button>
       )}
 
-      {premium && <p style={styles.premium}>🏆 Premium Active</p>}
- <div style={{ marginTop: "30px", fontSize: "12px" }}>
-  <a 
-    href="https://logo-five-mu.vercel.app/privacy.html"
-    target="_blank"
-    style={{ color: "#ffffff", marginRight: "15px" }}
-  >
-    Privacy Policy
-  </a>
+      {premium && (
+        <p style={styles.premium}>🏆 Premium Active</p>
+      )}
 
-  <a 
-    href="https://logo-five-mu.vercel.app/terms.html"
-    target="_blank"
-    style={{ color: "#ffffff" }}
-  >
-    Terms of Service
-  </a>
-</div>
+      {/* Privacy & Terms */}
+      <div style={{ marginTop: "30px", fontSize: "12px" }}>
+        <a
+          href="/privacy.html"
+          target="_blank"
+          style={{ color: "#ffffff", marginRight: "15px" }}
+        >
+          Privacy Policy
+        </a>
 
+        <a
+          href="/terms.html"
+          target="_blank"
+          style={{ color: "#ffffff" }}
+        >
+          Terms of Service
+        </a>
+      </div>
     </div>
   );
 }
+
+// =========================
+// STYLES
+// =========================
 
 const styles: any = {
   container: {
