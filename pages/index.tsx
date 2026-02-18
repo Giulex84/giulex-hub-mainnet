@@ -154,10 +154,11 @@ export default function Arena() {
         },
 
         onError: (error: any) => {
-          console.error("Payment error", error);
-        }
-      }
-    );
+  console.error("Payment error", error);
+}
+}
+);
+
   } catch (e) {
     console.error(e);
     alert("Payment failed");
