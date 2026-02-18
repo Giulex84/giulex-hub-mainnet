@@ -155,7 +155,7 @@ export default function Arena() {
 
         onError: (error: any) => {
           console.error("Payment error", error);
-        },
+        }
       }
     );
   } catch (e) {
