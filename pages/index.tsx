@@ -21,76 +21,50 @@ export default function Arena() {
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [premium, setPremium] = useState(false);
-
   const [uid, setUid] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
 
-  const [isPreview, setIsPreview] = useState(true);
-  const [canPlay, setCanPlay] = useState(false);
-
-  // -------------------------
-  // AUTH ROBUSTA
-  // -------------------------
   useEffect(() => {
-    let retryCount = 0;
-
-    const tryAuth = () => {
-      if (!window.Pi) return;
-
-      window.Pi.init({ version: "2.0" });
-
-      window.Pi.authenticate(
-        ["username", "payments", "wallet_address"],
-        () => {}
-      )
-        .then((auth: any) => {
-          setUid(auth.user.uid);
-          setUsername(auth.user.username);
-          setAuthReady(true);
-          setAuthLoading(false);
-        })
-        .catch(() => {
-          retryCount++;
-          if (retryCount < 5) {
-            setTimeout(tryAuth, 1000);
-          } else {
-            setAuthLoading(false);
-          }
-        });
-    };
+    initGame(4);
 
     const waitForPi = setInterval(() => {
       if (window.Pi) {
         clearInterval(waitForPi);
-        tryAuth();
+
+        window.Pi.init({ version: "2.0" });
+
+        window.Pi.authenticate(
+          ["username", "payments", "wallet_address"],
+          onIncompletePaymentFound
+        )
+          .then((auth: any) => {
+            setUid(auth.user.uid);
+            setUsername(auth.user.username);
+            setAuthReady(true);
+            console.log("AUTH OK", auth);
+          })
+          .catch((err: any) => {
+            console.error("AUTH ERROR", err);
+          });
       }
     }, 300);
-
-    const grid = getGridForLevel(1);
-    initGame(grid.rows, grid.cols);
 
     return () => clearInterval(waitForPi);
   }, []);
 
-  // -------------------------
-  // GAME LOGIC
-  // -------------------------
-
-  function getGridForLevel(lvl: number) {
-    if (lvl === 1) return { rows: 2, cols: 2 };
-    if (lvl === 2) return { rows: 2, cols: 3 };
-    if (lvl === 3) return { rows: 3, cols: 4 };
-    if (lvl === 4) return { rows: 4, cols: 4 };
-    if (lvl === 5) return { rows: 4, cols: 5 };
-    return { rows: 5, cols: 6 };
+  function onIncompletePaymentFound(payment: any) {
+    console.log("Incomplete payment", payment);
   }
 
-  function initGame(rows: number, cols: number) {
-    const total = rows * cols;
-    const pairCount = total / 2;
+  function gridSize() {
+    if (level <= 3) return 4;
+    if (level <= 6) return 5;
+    return 6;
+  }
 
+  function initGame(size: number) {
+    const pairCount = (size * size) / 2;
     const selectedSymbols = symbols.slice(0, pairCount);
     const doubled = [...selectedSymbols, ...selectedSymbols];
 
@@ -99,26 +73,18 @@ export default function Arena() {
       .map((value, index) => ({
         id: index,
         value,
-        flipped: true,
+        flipped: false,
         matched: false,
       }));
 
     setCards(shuffled);
     setSelected([]);
-    setIsPreview(true);
-    setCanPlay(false);
-
-    setTimeout(() => {
-      setCards(prev => prev.map(c => ({ ...c, flipped: false })));
-      setIsPreview(false);
-      setCanPlay(true);
-    }, 1500);
   }
 
   function handleFlip(card: CardType) {
-    if (!canPlay || card.flipped || card.matched || selected.length === 2) return;
+    if (card.flipped || card.matched || selected.length === 2) return;
 
-    const updated = cards.map(c =>
+    const updated = cards.map((c) =>
       c.id === card.id ? { ...c, flipped: true } : c
     );
 
@@ -136,27 +102,25 @@ export default function Arena() {
     const [first, second] = pair;
 
     if (first.value === second.value) {
-      setCards(prev =>
-        prev.map(c =>
+      setCards((prev) =>
+        prev.map((c) =>
           c.value === first.value ? { ...c, matched: true } : c
         )
       );
 
-      setScore(prev => prev + 10);
+      setScore((prev) => prev + 10);
 
       const allMatched = cards.every(
-        c => c.matched || c.value === first.value
+        (c) => c.matched || c.value === first.value
       );
 
       if (allMatched) {
-        const next = level + 1;
-        setLevel(next);
-        const grid = getGridForLevel(next);
-        initGame(grid.rows, grid.cols);
+        setLevel((prev) => prev + 1);
+        initGame(gridSize());
       }
     } else {
-      setCards(prev =>
-        prev.map(c =>
+      setCards((prev) =>
+        prev.map((c) =>
           c.id === first.id || c.id === second.id
             ? { ...c, flipped: false }
             : c
@@ -167,11 +131,12 @@ export default function Arena() {
     setSelected([]);
   }
 
-  // -------------------------
-  // PAYMENT (invariato)
-  // -------------------------
+  // 🔥 VERSIONE CORRETTA createPayment
   function unlockPremium() {
-    if (!window.Pi || !uid || !authReady) return;
+    if (!window.Pi || !uid || !authReady) {
+      alert("Auth not ready");
+      return;
+    }
 
     window.Pi.createPayment(
       {
@@ -179,15 +144,28 @@ export default function Arena() {
         memo: "Arena Premium Unlock",
         metadata: { uid },
       },
+
+      // 1️⃣ APPROVE
       async (paymentId: string) => {
-        await fetch("/api/pi", {
+        const approveRes = await fetch("/api/pi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "approve", paymentId, uid }),
+          body: JSON.stringify({
+            action: "approve",
+            paymentId,
+            uid,
+          }),
         });
+
+        if (!approveRes.ok) {
+          const data = await approveRes.json();
+          console.error("Approve failed", data);
+        }
       },
+
+      // 2️⃣ COMPLETE
       async (paymentId: string, txid: string) => {
-        const res = await fetch("/api/pi", {
+        const completeRes = await fetch("/api/pi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -198,57 +176,53 @@ export default function Arena() {
           }),
         });
 
-        if (res.ok) {
+        if (completeRes.ok) {
           setPremium(true);
+          alert("Premium unlocked!");
+        } else {
+          const data = await completeRes.json();
+          console.error("Complete failed", data);
         }
       },
-      () => {},
-      () => {}
+
+      // 3️⃣ CANCEL
+      (paymentId: string) => {
+        console.log("Payment cancelled", paymentId);
+      },
+
+      // 4️⃣ ERROR
+      (error: any) => {
+        console.error("Payment error", error);
+      }
     );
   }
 
-  const grid = getGridForLevel(level);
-
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>ARENA</h1>
-
-      {/* AUTH STATUS */}
-      {authLoading && (
-        <div style={styles.status}>Connecting to Pi...</div>
-      )}
+      <h1 style={styles.title}>⚔ ARENA ⚔</h1>
 
       {authReady && (
-        <div style={styles.status}>
-          Connected as {username}
+        <div style={{ marginBottom: 10 }}>
+          <div>User: {username}</div>
+          <div>UID: {uid}</div>
         </div>
       )}
 
-      <div style={styles.info}>
-        <div>Level {level}</div>
-        <div>Score {score}</div>
-      </div>
-
-      {isPreview && (
-        <div style={styles.preview}>Memorize the cards...</div>
-      )}
+      <p>Level {level}</p>
+      <p>Score: {score}</p>
 
       <div
         style={{
           ...styles.grid,
-          gridTemplateColumns: `repeat(${grid.cols}, 1fr)`,
+          gridTemplateColumns: `repeat(${gridSize()}, 1fr)`,
         }}
       >
-        {cards.map(card => (
+        {cards.map((card) => (
           <div
             key={card.id}
             style={{
               ...styles.card,
-              background: card.matched
-                ? "#1f3a2f"
-                : card.flipped
-                ? "#2a2a2a"
-                : "#222",
+              background: card.flipped || card.matched ? "#b30000" : "#1a1a1a",
             }}
             onClick={() => handleFlip(card)}
           >
@@ -258,50 +232,27 @@ export default function Arena() {
       </div>
 
       {!premium && (
-        <button
-          style={{
-            ...styles.button,
-            opacity: authReady ? 1 : 0.5,
-            cursor: authReady ? "pointer" : "not-allowed",
-          }}
-          disabled={!authReady}
-          onClick={unlockPremium}
-        >
+        <button style={styles.button} onClick={unlockPremium}>
           Unlock Premium (0.1 π)
         </button>
       )}
 
-      {premium && <p style={styles.premium}>Premium Active</p>}
+      {premium && <p style={{ color: "#00ff00" }}>🏆 Premium Active</p>}
     </div>
   );
 }
 
 const styles: any = {
   container: {
-    background: "linear-gradient(180deg, #111, #1a1a1a)",
+    background: "black",
     minHeight: "100vh",
-    color: "#eee",
+    color: "white",
     textAlign: "center",
     padding: "20px",
   },
   title: {
     fontSize: "2rem",
-    marginBottom: "10px",
-  },
-  status: {
-    opacity: 0.7,
-    marginBottom: "10px",
-  },
-  info: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "20px",
-    marginBottom: "10px",
-    opacity: 0.8,
-  },
-  preview: {
-    marginBottom: "10px",
-    opacity: 0.6,
+    color: "red",
   },
   grid: {
     display: "grid",
@@ -315,21 +266,17 @@ const styles: any = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    border: "1px solid #333",
+    border: "2px solid red",
     borderRadius: "8px",
     cursor: "pointer",
-    transition: "all 0.25s ease",
   },
   button: {
-    marginTop: "20px",
     padding: "10px 20px",
-    background: "#2ecc71",
+    fontSize: "1rem",
+    background: "red",
     border: "none",
-    color: "#111",
+    color: "white",
     borderRadius: "6px",
-  },
-  premium: {
-    marginTop: "15px",
-    color: "#2ecc71",
+    cursor: "pointer",
   },
 };
