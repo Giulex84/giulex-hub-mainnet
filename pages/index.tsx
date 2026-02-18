@@ -158,6 +158,24 @@ export default function Arena() {
       )}
 
       {premium && <p style={styles.premium}>🏆 Premium Active</p>}
+ <div style={{ marginTop: "30px", fontSize: "12px" }}>
+  <a 
+    href="https://logo-five-mu.vercel.app/privacy.html"
+    target="_blank"
+    style={{ color: "#ffffff", marginRight: "15px" }}
+  >
+    Privacy Policy
+  </a>
+
+  <a 
+    href="https://logo-five-mu.vercel.app/terms.html"
+    target="_blank"
+    style={{ color: "#ffffff" }}
+  >
+    Terms of Service
+  </a>
+</div>
+
     </div>
   );
 }
