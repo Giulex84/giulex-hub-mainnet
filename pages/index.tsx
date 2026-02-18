@@ -6,227 +6,210 @@ declare global {
   }
 }
 
-const translations: any = {
-  it: {
-    title: "Giulex Memory Arena",
-    start: "Inizia",
-    score: "Punteggio",
-    level: "Livello",
-    premium: "Sblocca Premium (0.1π)",
-    premiumActive: "Premium Attivo",
-    login: "Accedi con Pi",
-  },
-  en: {
-    title: "Giulex Memory Arena",
-    start: "Start",
-    score: "Score",
-    level: "Level",
-    premium: "Unlock Premium (0.1π)",
-    premiumActive: "Premium Active",
-    login: "Login with Pi",
-  },
+type CardType = {
+  id: number;
+  value: string;
+  flipped: boolean;
+  matched: boolean;
 };
 
-export default function Home() {
-  const [uid, setUid] = useState<string | null>(null);
-  const [language, setLanguage] = useState<"it" | "en">("it");
-  const [level, setLevel] = useState(1);
-  const [score, setScore] = useState(0);
-  const [cards, setCards] = useState<number[]>([]);
-  const [flipped, setFlipped] = useState<number[]>([]);
-  const [matched, setMatched] = useState<number[]>([]);
-  const [premium, setPremium] = useState(false);
-  const [loading, setLoading] = useState(false);
+const symbols = ["⚔", "🔥", "🛡", "🏹", "👑", "💎", "⚡", "🩸", "🧠", "🐉", "🌑", "☠"];
 
-  const t = translations[language];
+export default function Arena() {
+  const [cards, setCards] = useState<CardType[]>([]);
+  const [selected, setSelected] = useState<CardType[]>([]);
+  const [score, setScore] = useState(0);
+  const [level, setLevel] = useState(1);
+  const [premium, setPremium] = useState(false);
+  const [uid, setUid] = useState<string | null>(null);
 
   useEffect(() => {
     if (window.Pi) {
       window.Pi.init({ version: "2.0" });
+      window.Pi.authenticate(["username"], onIncompletePaymentFound)
+        .then((auth: any) => {
+          setUid(auth.user.uid);
+        });
     }
+    initGame(4);
   }, []);
 
-  const login = async () => {
-    const scopes = ["username", "payments", "wallet_address"];
-    const auth = await window.Pi.authenticate(scopes, () => {});
-    setUid(auth.user.uid);
-  };
+  function onIncompletePaymentFound(payment: any) {
+    console.log("Incomplete payment found", payment);
+  }
 
-  const generateLevel = () => {
-    let pairs = 3 + level; // aumenta difficoltà
-    if (premium) pairs += 2;
+  function gridSize() {
+    if (level <= 3) return 4;
+    if (level <= 6) return 5;
+    if (level <= 9) return 6;
+    return 6;
+  }
 
-    const values = Array.from({ length: pairs }, (_, i) => i);
-    const doubled = [...values, ...values];
-    const shuffled = doubled.sort(() => Math.random() - 0.5);
-
+  function initGame(size: number) {
+    const pairCount = (size * size) / 2;
+    const selectedSymbols = symbols.slice(0, pairCount);
+    const doubled = [...selectedSymbols, ...selectedSymbols];
+    const shuffled = doubled
+      .sort(() => Math.random() - 0.5)
+      .map((value, index) => ({
+        id: index,
+        value,
+        flipped: false,
+        matched: false,
+      }));
     setCards(shuffled);
-    setFlipped([]);
-    setMatched([]);
-  };
+    setSelected([]);
+  }
 
-  const flipCard = (index: number) => {
-    if (flipped.length === 2 || flipped.includes(index) || matched.includes(index)) return;
+  function handleFlip(card: CardType) {
+    if (card.flipped || card.matched || selected.length === 2) return;
 
-    const newFlipped = [...flipped, index];
-    setFlipped(newFlipped);
+    const newCards = cards.map(c =>
+      c.id === card.id ? { ...c, flipped: true } : c
+    );
+    setCards(newCards);
 
-    if (newFlipped.length === 2) {
-      if (cards[newFlipped[0]] === cards[newFlipped[1]]) {
-        setMatched([...matched, ...newFlipped]);
-        setScore(prev => prev + 10 * level);
-      }
-      setTimeout(() => setFlipped([]), 700);
-    }
-  };
+    const newSelected = [...selected, { ...card, flipped: true }];
+    setSelected(newSelected);
 
-  useEffect(() => {
-    if (matched.length === cards.length && cards.length > 0) {
+    if (newSelected.length === 2) {
       setTimeout(() => {
-        setLevel(prev => prev + 1);
-      }, 800);
+        checkMatch(newSelected);
+      }, 500);
     }
-  }, [matched]);
+  }
 
-  useEffect(() => {
-    generateLevel();
-  }, [level, premium]);
+  function checkMatch(selectedCards: CardType[]) {
+    const [first, second] = selectedCards;
+    if (first.value === second.value) {
+      setCards(prev =>
+        prev.map(c =>
+          c.value === first.value ? { ...c, matched: true } : c
+        )
+      );
+      setScore(prev => prev + 10);
 
-  const pay = async () => {
+      const allMatched = cards.every(c => c.matched || c.value === first.value);
+      if (allMatched) {
+        setLevel(prev => prev + 1);
+        initGame(gridSize());
+      }
+    } else {
+      setCards(prev =>
+        prev.map(c =>
+          c.id === first.id || c.id === second.id
+            ? { ...c, flipped: false }
+            : c
+        )
+      );
+    }
+    setSelected([]);
+  }
+
+  async function unlockPremium() {
     if (!window.Pi || !uid) return;
 
-    setLoading(true);
-
-    await window.Pi.createPayment(
-      {
+    try {
+      const payment = await window.Pi.createPayment({
         amount: 0.1,
-        memo: "Giulex Premium Mode",
-        metadata: { type: "premium_unlock" },
-      },
-      {
-        onReadyForServerApproval: async (paymentId: string) => {
-          await fetch("/api/pi", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "approve", paymentId }),
-          });
-        },
-        onReadyForServerCompletion: async (paymentId: string, txid: string) => {
-          await fetch("/api/pi", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "complete", paymentId, txid }),
-          });
-          setPremium(true);
-        },
-      }
-    );
+        memo: "Arena Premium Unlock",
+        metadata: { uid },
+      });
 
-    setLoading(false);
-  };
+      if (payment) {
+        setPremium(true);
+        alert("Premium unlocked!");
+      }
+    } catch (e) {
+      alert("Payment failed");
+    }
+  }
 
   return (
     <div style={styles.container}>
-      <h1>{t.title}</h1>
-
-      <div style={styles.lang}>
-        <button onClick={() => setLanguage("it")}>🇮🇹</button>
-        <button onClick={() => setLanguage("en")}>🇬🇧</button>
-      </div>
-
-      {!uid && <button style={styles.login} onClick={login}>{t.login}</button>}
-
-      <div style={styles.stats}>
-        <div>{t.level}: {level}</div>
-        <div>{t.score}: {score}</div>
-      </div>
+      <h1 style={styles.title}>⚔ ARENA ⚔</h1>
+      <p style={styles.level}>Level {level}</p>
+      <p style={styles.score}>Score: {score}</p>
 
       <div
         style={{
           ...styles.grid,
-          gridTemplateColumns: `repeat(${Math.min(6, Math.ceil(Math.sqrt(cards.length)))}, 70px)`
+          gridTemplateColumns: `repeat(${gridSize()}, 1fr)`,
         }}
       >
-        {cards.map((card, index) => (
+        {cards.map(card => (
           <div
-            key={index}
-            onClick={() => flipCard(index)}
+            key={card.id}
             style={{
               ...styles.card,
-              background:
-                flipped.includes(index) || matched.includes(index)
-                  ? "#ffffff"
-                  : "#2a2a3b",
-              color: "#000",
-              transform: flipped.includes(index) ? "rotateY(180deg)" : "none",
+              background: card.flipped || card.matched ? "#b30000" : "#1a1a1a",
             }}
+            onClick={() => handleFlip(card)}
           >
-            {(flipped.includes(index) || matched.includes(index)) ? card : ""}
+            {card.flipped || card.matched ? card.value : ""}
           </div>
         ))}
       </div>
 
       {!premium && (
-        <button style={styles.premium} onClick={pay}>
-          {loading ? "..." : t.premium}
+        <button style={styles.button} onClick={unlockPremium}>
+          Unlock Premium (0.1 π)
         </button>
       )}
 
-      {premium && <div style={styles.premiumActive}>💎 {t.premiumActive}</div>}
+      {premium && <p style={styles.premium}>🏆 Premium Active</p>}
     </div>
   );
 }
 
 const styles: any = {
   container: {
-    textAlign: "center",
+    background: "linear-gradient(180deg, #000000, #1a0000)",
     minHeight: "100vh",
-    background: "linear-gradient(180deg, #0f0f1a, #1a1a2e)",
-    color: "#fff",
-    paddingTop: 40,
-    fontFamily: "Arial",
+    color: "white",
+    textAlign: "center",
+    padding: "20px",
   },
-  lang: {
-    marginBottom: 15,
+  title: {
+    fontSize: "2.5rem",
+    color: "#ff0000",
   },
-  login: {
-    padding: 10,
-    marginBottom: 15,
+  level: {
+    fontSize: "1.2rem",
   },
-  stats: {
-    display: "flex",
-    justifyContent: "space-around",
-    marginBottom: 20,
-    fontSize: 18,
+  score: {
+    fontSize: "1.2rem",
+    marginBottom: "20px",
   },
   grid: {
     display: "grid",
-    gap: 10,
-    justifyContent: "center",
+    gap: "10px",
+    maxWidth: "600px",
+    margin: "0 auto",
   },
   card: {
-    width: 70,
-    height: 70,
-    borderRadius: 12,
+    aspectRatio: "1",
+    fontSize: "1.5rem",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 22,
+    border: "2px solid #ff0000",
+    borderRadius: "8px",
     cursor: "pointer",
     transition: "0.3s",
   },
-  premium: {
-    marginTop: 25,
-    padding: 12,
-    borderRadius: 10,
-    background: "#ffcc00",
+  button: {
+    marginTop: "20px",
+    padding: "10px 20px",
+    fontSize: "1rem",
+    background: "#ff0000",
     border: "none",
-    fontWeight: "bold",
+    color: "white",
+    borderRadius: "6px",
     cursor: "pointer",
   },
-  premiumActive: {
-    marginTop: 20,
-    fontSize: 18,
-    color: "#00ffcc",
+  premium: {
+    marginTop: "20px",
+    color: "#00ff00",
   },
 };
