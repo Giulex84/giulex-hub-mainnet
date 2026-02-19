@@ -42,6 +42,7 @@ export default function Arena() {
             setUid(auth.user.uid);
             setUsername(auth.user.username);
             setAuthReady(true);
+            console.log("AUTH OK", auth);
           })
           .catch((err: any) => {
             console.error("AUTH ERROR", err);
@@ -56,7 +57,10 @@ export default function Arena() {
     console.log("Incomplete payment", payment);
   }
 
+  // 🔥 PREMIUM = sempre facile
   function gridSize() {
+    if (premium) return 4;
+
     if (level <= 3) return 4;
     if (level <= 6) return 5;
     return 6;
@@ -107,7 +111,8 @@ export default function Arena() {
         )
       );
 
-      setScore((prev) => prev + 10);
+      // 🔥 PREMIUM = punti doppi
+      setScore((prev) => prev + (premium ? 20 : 10));
 
       const allMatched = cards.every(
         (c) => c.matched || c.value === first.value
@@ -142,18 +147,29 @@ export default function Arena() {
         memo: "Arena Premium Unlock",
         metadata: { uid },
       },
+
       async (paymentId: string) => {
         await fetch("/api/pi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "approve", paymentId, uid }),
+          body: JSON.stringify({
+            action: "approve",
+            paymentId,
+            uid,
+          }),
         });
       },
+
       async (paymentId: string, txid: string) => {
         const res = await fetch("/api/pi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "complete", paymentId, txid, uid }),
+          body: JSON.stringify({
+            action: "complete",
+            paymentId,
+            txid,
+            uid,
+          }),
         });
 
         if (res.ok) {
@@ -161,7 +177,11 @@ export default function Arena() {
           alert("Premium unlocked!");
         }
       },
-      () => {},
+
+      (paymentId: string) => {
+        console.log("Payment cancelled", paymentId);
+      },
+
       (error: any) => {
         console.error("Payment error", error);
       }
@@ -173,8 +193,8 @@ export default function Arena() {
       <h1 style={styles.title}>⚔ ARENA ⚔</h1>
 
       {authReady && (
-        <div style={{ marginBottom: 15, fontSize: "0.95rem", opacity: 0.8 }}>
-          👤 {username}
+        <div style={{ marginBottom: 10 }}>
+          <div>👤 {username}</div>
         </div>
       )}
 
@@ -209,14 +229,10 @@ export default function Arena() {
 
       {premium && <p style={{ color: "#00ff00" }}>🏆 Premium Active</p>}
 
-      <div style={styles.footer}>
-        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={styles.footerLink}>
-          Privacy
-        </a>
-        <span style={{ margin: "0 10px" }}>|</span>
-        <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={styles.footerLink}>
-          Terms
-        </a>
+      <div style={{ marginTop: 30, opacity: 0.6 }}>
+        <a href="/privacy.html" style={styles.link}>Privacy</a>
+        {"  |  "}
+        <a href="/terms.html" style={styles.link}>Terms</a>
       </div>
     </div>
   );
@@ -259,13 +275,9 @@ const styles: any = {
     borderRadius: "6px",
     cursor: "pointer",
   },
-  footer: {
-    marginTop: "30px",
-    fontSize: "12px",
-    opacity: 0.6,
-  },
-  footerLink: {
-    color: "#aaaaaa",
+  link: {
+    color: "#888",
     textDecoration: "none",
+    margin: "0 5px",
   },
 };
