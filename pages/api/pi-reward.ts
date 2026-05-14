@@ -1,72 +1,90 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-const StellarSdk = require("@stellar/stellar-sdk");
-
-const { TransactionBuilder, Operation, Asset, Keypair, Memo } = StellarSdk;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { uid, amount } = req.body;
+  console.log("DEBUG: Inizio procedura reward per UID:", req.body.uid);
+
+  // 1. Caricamento dinamico Stellar
+  const StellarSdk = require("@stellar/stellar-sdk");
+  
+  // 2. Controllo rigoroso variabili d'ambiente
   const PI_API_KEY = process.env.PI_API_KEY;
   const APP_SEED = process.env.PI_APP_WALLET_SEED;
 
-  if (!PI_API_KEY || !APP_SEED) return res.status(500).json({ error: "Server configuration missing" });
-
-  const BASE_URL = "https://api.minepi.com/v2/payments";
+  if (!PI_API_KEY || !APP_SEED) {
+    console.error("ERRORE: Variabili d'ambiente mancanti su Vercel!");
+    return res.status(500).json({ 
+      error: "Server configuration missing", 
+      details: "Check PI_API_KEY and PI_APP_WALLET_SEED in Vercel settings." 
+    });
+  }
 
   try {
-    // 1. Crea pagamento su Pi API
-    let createRes = await fetch(BASE_URL, {
+    const { uid, amount } = req.body;
+    const BASE_URL = "https://api.minepi.com/v2/payments";
+
+    // 3. Creazione Pagamento su Pi Network
+    const createRes = await fetch(BASE_URL, {
       method: "POST",
-      headers: { Authorization: `Key ${PI_API_KEY}`, "Content-Type": "application/json" },
+      headers: { "Authorization": `Key ${PI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         payment: { amount, memo: "Arena Combo Reward", metadata: { source: "ArenaGame" }, uid }
       }),
     });
 
-    let createData = await createRes.json();
-
-    // Gestione pagamento in sospeso
-    if (createData.error === "ongoing_payment_found") {
-      const ongoingId = createData.payment.identifier;
-      await fetch(`${BASE_URL}/${ongoingId}/cancel`, { method: "POST", headers: { Authorization: `Key ${PI_API_KEY}` } });
-      return res.status(400).json({ error: "Retry requested - cleared old payment" });
+    const createData: any = await createRes.json();
+    if (!createRes.ok) {
+      console.error("ERRORE API PI (Create):", createData);
+      return res.status(400).json({ error: createData.error });
     }
 
     const paymentId = createData.identifier;
     const destination = createData.to_address;
 
-    // 2. Approva
-    await fetch(`${BASE_URL}/${paymentId}/approve`, { method: "POST", headers: { Authorization: `Key ${PI_API_KEY}` } });
+    // 4. Approvazione
+    await fetch(`${BASE_URL}/${paymentId}/approve`, {
+      method: "POST",
+      headers: { "Authorization": `Key ${PI_API_KEY}` }
+    });
 
-    // 3. Firma e Sottometti su Blockchain MAINNET
-    const server = new StellarSdk.Horizon.Server("https://api.mainnet.minepi.com"); // Endpoint Mainnet
-    const keypair = Keypair.fromSecret(APP_SEED);
+    // 5. Firma Blockchain Mainnet
+    const server = new StellarSdk.Horizon.Server("https://api.mainnet.minepi.com");
+    const keypair = StellarSdk.Keypair.fromSecret(APP_SEED);
     const account = await server.loadAccount(keypair.publicKey());
 
-    const tx = new TransactionBuilder(account, {
-      fee: "1000000",
-      networkPassphrase: "Pi Network", // Passphrase Mainnet
+    const tx = new StellarSdk.TransactionBuilder(account, {
+      fee: "1000000", // Fee standard Mainnet Pi
+      networkPassphrase: "Pi Network",
     })
-      .addMemo(Memo.text(paymentId))
-      .addOperation(Operation.payment({ destination, asset: Asset.native(), amount: Number(amount).toFixed(7) }))
-      .setTimeout(120)
+      .addMemo(StellarSdk.Memo.text(paymentId))
+      .addOperation(StellarSdk.Operation.payment({ 
+        destination, 
+        asset: StellarSdk.Asset.native(), 
+        amount: Number(amount).toFixed(7) 
+      }))
+      .setTimeout(180)
       .build();
 
     tx.sign(keypair);
     const result = await server.submitTransaction(tx);
-    const txid = result.hash;
 
-    // 4. Completa
+    // 6. Completamento
     await fetch(`${BASE_URL}/${paymentId}/complete`, {
       method: "POST",
-      headers: { Authorization: `Key ${PI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ txid }),
+      headers: { "Authorization": `Key ${PI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ txid: result.hash }),
     });
 
-    return res.status(200).json({ success: true, txid });
+    console.log("SUCCESS: Reward inviato con successo, TXid:", result.hash);
+    return res.status(200).json({ success: true, txid: result.hash });
+
   } catch (err: any) {
-    console.error("Reward Failure:", err);
-    return res.status(500).json({ error: "Reward failed", details: err.message });
+    console.error("CRITICAL ERROR in pi-reward:", err);
+    return res.status(500).json({ 
+      error: "Reward process failed", 
+      message: err.message,
+      check: "Is your app wallet under review? This blocks A2U payments." 
+    });
   }
 }
