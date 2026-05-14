@@ -1,50 +1,20 @@
-# Arena – Pi Network Memory Game
+# Arena – Pi Network Memory Game (Mainnet)
 
-Arena is a skill-based memory card game built on Pi Network Mainnet.
-
-Players progress through increasing levels of difficulty and improve their score by matching pairs of symbols.
+Arena is a high-stakes, skill-based memory game integrated with the Pi Network Mainnet.
 
 ## Features
+- **Progressive Difficulty:** Grid sizes increase as you level up.
+- **Lives System:** Limited lives for free players, infinite for Premium.
+- **Combo Rewards:** Achieving a x3 combo rewards players with **0.3 Pi** (A2U).
+- **Premium Access:** Unlock infinite lives for 10 levels via a **1.0 Pi** payment (U2A).
 
-- Pi SDK exclusive authentication
-- Progressive difficulty levels
-- Score tracking
-- Optional Premium unlock via Pi payment
-- Clean and mobile-friendly interface
-
-## Premium Features
-
-Premium access is optional and unlocked through a Pi payment.
-
-Premium provides:
-- Double score rewards
-- Simplified level progression (easier grid size)
-
-Premium is not required to play the game.
-
-## Authentication
-
-Arena uses the official Pi Network SDK for authentication.
-No external login methods are implemented.
-
-## Payments
-
-Premium purchases are processed exclusively through the official Pi Network payment system.
-Arena does not store private keys or wallet information.
-
-## Data & Privacy
-
-Arena does not collect or store personal data.
-Only Pi username and UID are received via the official SDK for in-app functionality.
+## Security & Compliance
+- **Pi SDK v2.0:** Secure authentication and wallet integration.
+- **Non-Custodial:** No private keys are stored; payments are verified on-chain.
+- **Legal:** English language support with built-in Privacy Policy and Terms of Service.
 
 ## Tech Stack
-
-- Next.js
-- React
-- Pi Network SDK v2
-- Vercel Hosting
-
-## Disclaimer
-
-Arena is a game intended for entertainment purposes only.
-It does not offer financial returns, investment opportunities, or income guarantees.
+- **Framework:** Next.js (React)
+- **Language:** TypeScript
+- **Blockchain:** Pi Network Mainnet (Horizon)
+- **Deployment:** Vercel
