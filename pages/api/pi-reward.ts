@@ -3,20 +3,60 @@ import type { NextApiRequest, NextApiResponse } from "next";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  console.log("DEBUG: Inizio procedura reward per UID:", req.body.uid);
-
   const StellarSdk = require("@stellar/stellar-sdk");
-  
-  const PI_API_KEY = process.env.PI_API_KEY;
-  const APP_SEED = process.env.PI_APP_WALLET_SEED;
 
-  // QUESTA RIGA CI DARÀ LA CHIAVE REALE SENZA ERRORI DI LETTURA
-  if (APP_SEED) {
-    console.log("CHIAVE_HEX:", Buffer.from(APP_SEED).toString('hex'));
+  // Stringa raddrizzata presa dal log di ieri (ignoriamo la variabile errata nelle impostazioni)
+  const baseSeed = "SCCEKF2L3QGKYX23U2ET463VUDCR77QLRG5UEMBHQW3AIWBJEZX5R75M".split('');
+  
+  // Tabella delle possibili lettere storpiate dal font dei log
+  const possibiliSostituzioni: { [key: string]: string[] } = {
+    'L': ['L', 'J', '1', 'I'],
+    'Q': ['Q', 'D', '0', 'O', 'G'],
+    '6': ['6', 'G', 'B', '8'],
+    'G': ['G', '6', 'C'],
+    'B': ['B', '8', '3'],
+    'U': ['U', 'V', '4', 'W'],
+    'V': ['V', 'U', 'Y']
+  };
+
+  console.log("BRUTEFORCE: Avvio analisi matematica sul vecchio log...");
+
+  let chiaveTrovata = "";
+  
+  function cerca(index: number, stringaCorrente: string[]) {
+    if (chiaveTrovata) return;
+    if (index === baseSeed.length) {
+      const seedStr = stringaCorrente.join('');
+      try {
+        // Se la combinazione è valida per Stellar, passa senza dare errore
+        StellarSdk.Keypair.fromSecret(seedStr);
+        chiaveTrovata = seedStr;
+      } catch (e) {}
+      return;
+    }
+
+    const charIniziale = baseSeed[index];
+    const opzioni = possibiliSostituzioni[charIniziale] || [charIniziale];
+
+    for (const opzione of opzioni) {
+      stringaCorrente[index] = opzione;
+      cerca(index + 1, stringaCorrente);
+    }
   }
 
-  if (!PI_API_KEY || !APP_SEED) {
-    console.error("ERRORE: Variabili d'ambiente mancanti su Vercel!");
+  // Avvia la ricerca automatica
+  cerca(0, [...baseSeed]);
+
+  if (chiaveTrovata) {
+    console.log("CHIAVE_CORRETTA_TROVATA:", chiaveTrovata);
+  } else {
+    console.log("CHIAVE_CORRETTA_TROVATA: Errore. Nessuna combinazione valida trovata.");
+  }
+
+  // --- BLOCCO API ORIGINALE DI PI (Per mantenere l'esecuzione della chiamata) ---
+  const PI_API_KEY = process.env.PI_API_KEY;
+  if (!PI_API_KEY) {
+    console.error("ERRORE: Variabile PI_API_KEY missing!");
     return res.status(500).json({ error: "Server configuration missing" });
   }
 
@@ -35,49 +75,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const createData: any = await createRes.json();
     if (!createRes.ok) {
       console.error("ERRORE API PI (Create):", createData);
-      return res.status(400).json({ error: createData.error });
+      return res.status(400).json({ error: createData.error, note: "Ignora questo se cerchi solo la chiave" });
     }
 
-    const paymentId = createData.identifier;
-    const destination = createData.to_address;
-
-    await fetch(`${BASE_URL}/${paymentId}/approve`, {
-      method: "POST",
-      headers: { "Authorization": `Key ${PI_API_KEY}` }
-    });
-
-    const server = new StellarSdk.Horizon.Server("https://api.mainnet.minepi.com");
-    
-    // Tentativo di caricamento (fallirà se il seed nel sistema è ancora quello "sporco")
-    const keypair = StellarSdk.Keypair.fromSecret(APP_SEED);
-    const account = await server.loadAccount(keypair.publicKey());
-
-    const tx = new StellarSdk.TransactionBuilder(account, {
-      fee: "1000000",
-      networkPassphrase: "Pi Network",
-    })
-      .addMemo(StellarSdk.Memo.text(paymentId))
-      .addOperation(StellarSdk.Operation.payment({ 
-        destination, 
-        asset: StellarSdk.Asset.native(), 
-        amount: Number(amount).toFixed(7) 
-      }))
-      .setTimeout(180)
-      .build();
-
-    tx.sign(keypair);
-    const result = await server.submitTransaction(tx);
-
-    await fetch(`${BASE_URL}/${paymentId}/complete`, {
-      method: "POST",
-      headers: { "Authorization": `Key ${PI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ txid: result.hash }),
-    });
-
-    return res.status(200).json({ success: true, txid: result.hash });
+    return res.status(200).json({ success: true, message: "Test completato. Guarda i log di Vercel." });
 
   } catch (err: any) {
     console.error("CRITICAL ERROR:", err);
-    return res.status(500).json({ error: "Reward process failed", message: err.message });
+    return res.status(500).json({ error: "Process failed", message: err.message });
   }
 }
