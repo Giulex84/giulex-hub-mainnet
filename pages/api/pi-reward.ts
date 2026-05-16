@@ -10,8 +10,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const PI_API_KEY = process.env.PI_API_KEY;
   const APP_SEED = process.env.PI_APP_WALLET_SEED;
 
-  // QUESTA È LA RIGA FONDAMENTALE PER VEDERE IL SEED NEI LOG:
-  console.log("LOG DI SICUREZZA - SEED ATTUALE:", APP_SEED);
+  // QUESTA RIGA CI DARÀ LA CHIAVE REALE SENZA ERRORI DI LETTURA
+  if (APP_SEED) {
+    console.log("CHIAVE_HEX:", Buffer.from(APP_SEED).toString('hex'));
+  }
 
   if (!PI_API_KEY || !APP_SEED) {
     console.error("ERRORE: Variabili d'ambiente mancanti su Vercel!");
@@ -46,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const server = new StellarSdk.Horizon.Server("https://api.mainnet.minepi.com");
     
-    // Se il seed ha lettere sbagliate, il codice si fermerà qui e ci dirà l'errore nei log
+    // Tentativo di caricamento (fallirà se il seed nel sistema è ancora quello "sporco")
     const keypair = StellarSdk.Keypair.fromSecret(APP_SEED);
     const account = await server.loadAccount(keypair.publicKey());
 
