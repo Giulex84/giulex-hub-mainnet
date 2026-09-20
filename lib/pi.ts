@@ -6,7 +6,7 @@ export const PREMIUM_PRODUCT = "arena_premium_v1";
 export const PREMIUM_AMOUNT = 1;
 export const PREMIUM_MEMO = "Arena Premium Unlock";
 export const REPLAY_PRODUCT = "arena_daily_replay_v1";
-export const REPLAY_AMOUNT = 0.1;
+export const REPLAY_AMOUNT = 0.5;
 export const REPLAY_MEMO = "Arena Daily Replay Ticket";
 
 export type PiUser = {
