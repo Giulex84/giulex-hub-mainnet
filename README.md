@@ -11,6 +11,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Transactions: Pi only
 - Premium: **1 Pi U2A**, verified server-side and persisted by verified Pi UID
 - Daily Replay Ticket: **0.5 Pi U2A** consumable, verified and fulfilled server-side
+- Replay payments with any other amount are rejected by the Mainnet backend.
 - Daily Arena: server-controlled, persistent per UTC day, with best result and Top 10 leaderboard
 - Async PvP: shared server-controlled deck, real Pioneer matchmaking and disclosed Arena Bot fallback
 - Gameplay progress: persisted server-side and restored by verified Pi UID
