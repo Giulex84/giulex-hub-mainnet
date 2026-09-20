@@ -6,7 +6,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 
 - Network: **Pi Mainnet**
 - Pi SDK mode: `sandbox: false`
-- Next Developer Portal update version: **1.2.0**
+- Developer Portal version submitted for review: **1.0.2**
 - Authentication: Pi SDK only
 - Transactions: Pi only
 - Premium: **1 Pi U2A**, verified server-side and persisted by verified Pi UID
@@ -18,7 +18,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Mainnet A2U gameplay rewards: **disabled intentionally** until explicitly authorized for the production app
 - Public review documents: `privacy.html`, `terms.html`, and `validation-key.txt` on the verified production domain
 
-The 1.2.0 update is intended for submission after the deployed Mainnet build is verified inside Pi Browser.
+The Mainnet update is currently in review under Developer Portal version **1.0.2**. The portal submitted the update directly and did not permit changing this field; do not cancel or recreate the request solely to alter the version label.
 
 ## Important changes
 
@@ -36,7 +36,7 @@ The 1.2.0 update is intended for submission after the deployed Mainnet build is 
 - Daily and PvP card flips use atomic server-side state transitions to prevent concurrent-move corruption and reduce latency.
 - Privacy Policy and Terms were updated to match actual data/payment behavior.
 
-## Mainnet review checklist — version 1.2.0
+## Mainnet review checklist — submitted version 1.0.2
 
 - Production URL opens inside Pi Browser without leaving a blank or legacy page.
 - Pi sign-in requests only `username` and `payments` and the backend verifies `/v2/me`.
