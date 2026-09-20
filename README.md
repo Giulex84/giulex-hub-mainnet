@@ -6,15 +6,18 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 
 - Network: **Pi Mainnet**
 - Pi SDK mode: `sandbox: false`
-- Developer Portal version currently submitted/pending: **1.0.2**
+- Next Developer Portal update version: **1.1.0**
 - Authentication: Pi SDK only
 - Transactions: Pi only
 - Premium: **1 Pi U2A**, verified server-side and persisted by verified Pi UID
+- Daily Replay Ticket: **0.1 Pi U2A** consumable, verified and fulfilled server-side
+- Daily Arena: server-controlled, persistent per UTC day, with best result and Top 10 leaderboard
+- Async PvP: shared server-controlled deck, real Pioneer matchmaking and disclosed Arena Bot fallback
 - Gameplay progress: persisted server-side and restored by verified Pi UID
 - Mainnet A2U gameplay rewards: **disabled intentionally** until explicitly authorized for the production app
 - Public review documents: `privacy.html`, `terms.html`, and `validation-key.txt` on the verified production domain
 
-The current Developer Portal update request should not be discarded merely to change the version number; use the next version only for a future submission after the pending review is resolved.
+The 1.1.0 update is intended for submission after the deployed Mainnet build is verified inside Pi Browser.
 
 ## Important changes
 
