@@ -3,7 +3,11 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   async rewrites() {
-    return [{ source: '/', destination: '/arena.html' }];
+    return {
+      beforeFiles: [{ source: '/', destination: '/arena.html' }],
+      afterFiles: [],
+      fallback: [],
+    };
   },
   async headers() {
     return [{
