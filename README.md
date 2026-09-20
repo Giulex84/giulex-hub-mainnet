@@ -6,7 +6,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 
 - Network: **Pi Mainnet**
 - Pi SDK mode: `sandbox: false`
-- Next Developer Portal update version: **1.1.0**
+- Next Developer Portal update version: **1.2.0**
 - Authentication: Pi SDK only
 - Transactions: Pi only
 - Premium: **1 Pi U2A**, verified server-side and persisted by verified Pi UID
@@ -18,7 +18,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Mainnet A2U gameplay rewards: **disabled intentionally** until explicitly authorized for the production app
 - Public review documents: `privacy.html`, `terms.html`, and `validation-key.txt` on the verified production domain
 
-The 1.1.0 update is intended for submission after the deployed Mainnet build is verified inside Pi Browser.
+The 1.2.0 update is intended for submission after the deployed Mainnet build is verified inside Pi Browser.
 
 ## Important changes
 
@@ -32,7 +32,22 @@ The 1.1.0 update is intended for submission after the deployed Mainnet build is 
 - Paid entitlement is no longer trusted from `localStorage`; it is stored server-side by verified Pi UID.
 - Gameplay progress (`level`, `lives`, `score`) is also stored server-side by verified Pi UID and restored after signing back in. A non-Premium Game Over can restart the current level while preserving accumulated score/progress.
 - Wildcard CORS was removed and baseline security headers were added.
+- Dynamic Pi usernames are rendered as text rather than injected HTML.
+- Daily and PvP card flips use atomic server-side state transitions to prevent concurrent-move corruption and reduce latency.
 - Privacy Policy and Terms were updated to match actual data/payment behavior.
+
+## Mainnet review checklist — version 1.2.0
+
+- Production URL opens inside Pi Browser without leaving a blank or legacy page.
+- Pi sign-in requests only `username` and `payments` and the backend verifies `/v2/me`.
+- Premium clearly states **1 Pi** before Pi Wallet confirmation and persists after reload.
+- Daily Replay Ticket clearly states **0.5 Pi**, adds one consumable credit, and never awards Pi.
+- Incomplete Premium and Replay payments recover without duplicate fulfillment.
+- Classic progress, Daily state, Top 10 and async PvP restore from server-side state.
+- PvP clearly discloses the Arena Bot and has no wager, entry fee or prize.
+- Privacy and Terms links are visible from the main screen and publicly accessible without login.
+- `validation-key.txt` is publicly accessible from the submitted production domain.
+- Listing screenshots and description show the current Mainnet UI and do not mention Test-Pi, rewards or investment returns.
 
 ## Required production environment variables
 
