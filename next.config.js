@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  async rewrites() {
+    return [{ source: '/', destination: '/arena.html' }];
+  },
   async headers() {
     return [{
       source: '/(:path*)',
