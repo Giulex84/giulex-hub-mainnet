@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { bearerFromRequest, issueArenaSession, verifyPiAccessToken } from "../../lib/pi";
 import { getReplayCredits, hasPremium, isStoreConfigured, saveProfile } from "../../lib/store";
+import { safeRecordMetric } from "../../lib/metrics";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader("Cache-Control", "no-store");
@@ -10,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const user = await verifyPiAccessToken(token);
     const storeReady = isStoreConfigured();
-    if (storeReady) await saveProfile(user.uid, user.username || null);
+    if (storeReady) { await saveProfile(user.uid, user.username || null); await safeRecordMetric(user.uid, "login"); }
     return res.status(200).json({
       uid: user.uid,
       username: user.username || null,
