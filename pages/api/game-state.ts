@@ -2,6 +2,7 @@
 const crypto = require("crypto");
 const { bearerFromRequest, arenaSessionFromRequest, verifyArenaSession, verifyAccessToken } = require("../../lib/pi");
 const { getGameState, saveGameState, getDailyChallenge, saveDailyChallenge, acquireDailyLock, releaseDailyLock, flipDailyCard, getReplayCredits, consumeReplayCredit, recordDailyAttempt, recordDailyResult, getDailyMeta, getDailyLeaderboard, getPvpMatch, savePvpMatch, getUserPvpMatch, setUserPvpMatch, clearUserPvpMatch, getPvpQueue, setPvpQueue, clearPvpQueue, acquirePvpLock, releasePvpLock, acquirePvpMatchLock, releasePvpMatchLock, flipPvpCard, isStoreConfigured } = require("../../lib/store");
+const { safeRecordMetric } = require("../../lib/metrics");
 
 const DAILY_SYMBOLS=["⚔","🔥","🛡","🏹","👑","💎"];
 const MAX_MOVES=18;
@@ -55,19 +56,21 @@ export default async function handler(req,res){
     if(action==="daily-leaderboard")return res.status(200).json(await getDailyLeaderboard(user.uid,day));
     if(action==="daily-start"||action==="daily-status"){
       let daily=await getDailyChallenge(user.uid,day);
-      if(!daily){daily={day,deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString()};await saveDailyChallenge(user.uid,day,daily);await recordDailyAttempt(user.uid,day);}
+      if(!daily){daily={day,deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString()};await saveDailyChallenge(user.uid,day,daily);await recordDailyAttempt(user.uid,day);await safeRecordMetric(user.uid,"daily_started",daily.startedAt);}
       let meta=await getDailyMeta(user.uid,day);if(meta.attempts<1){await recordDailyAttempt(user.uid,day);meta=await getDailyMeta(user.uid,day);}if(daily.status==="completed"&&!meta.best){meta.best=await recordDailyResult(user.uid,day,daily);}
       return res.status(200).json({daily:publicDaily(daily),meta});
     }
     if(action==="daily-reset"){
       const lockId=await acquireDailyLock(user.uid,day);
-      try{const replayCredits=await consumeReplayCredit(user.uid),daily={day,deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString(),replay:true};await saveDailyChallenge(user.uid,day,daily);await recordDailyAttempt(user.uid,day);return res.status(200).json({daily:publicDaily(daily),replayCredits,meta:await getDailyMeta(user.uid,day)});}finally{await releaseDailyLock(user.uid,day,lockId);}
+      try{const replayCredits=await consumeReplayCredit(user.uid),daily={day,deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString(),replay:true};await saveDailyChallenge(user.uid,day,daily);await recordDailyAttempt(user.uid,day);await safeRecordMetric(user.uid,"daily_replay_started",daily.startedAt);return res.status(200).json({daily:publicDaily(daily),replayCredits,meta:await getDailyMeta(user.uid,day)});}finally{await releaseDailyLock(user.uid,day,lockId);}
     }
     if(action==="daily-flip"){
       const index=Number(req.body?.index);
       if(!Number.isInteger(index)||index<0||index>=DAILY_SYMBOLS.length*2)return res.status(400).json({error:"Invalid card"});
       const result=await flipDailyCard(user.uid,day,index,MAX_MOVES),daily=result.daily;
       const meta=daily.status==="completed"?{attempts:(await getDailyMeta(user.uid,day)).attempts,best:await recordDailyResult(user.uid,day,daily)}:null;
+      if(result.reveal&&!result.reveal.pending&&daily.status==="completed")await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day);
+      if(result.reveal&&!result.reveal.pending&&daily.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day);
       return res.status(200).json({daily:publicDaily(daily),meta,reveal:result.reveal});
     }
     if(action==="pvp-status"){
@@ -83,17 +86,18 @@ export default async function handler(req,res){
       const lockId=await acquirePvpLock();
       try{
         const queued=await getPvpQueue();
-        if(queued&&queued.uid!==user.uid){const match=await getPvpMatch(queued.matchId);if(match&&match.status==="waiting"){match.players.push(newPvpPlayer(user.uid,user.username));match.status="active";match.matchedAt=new Date().toISOString();await savePvpMatch(match);await setUserPvpMatch(user.uid,match.id);await clearPvpQueue(match.id);return res.status(200).json({pvp:publicPvp(match,user.uid)});}await clearPvpQueue(queued.matchId);}
-        const match={id:crypto.randomUUID(),status:"waiting",deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),players:[newPvpPlayer(user.uid,user.username)],createdAt:new Date().toISOString()};await savePvpMatch(match);await setUserPvpMatch(user.uid,match.id);await setPvpQueue({uid:user.uid,matchId:match.id});return res.status(200).json({pvp:publicPvp(match,user.uid)});
+        if(queued&&queued.uid!==user.uid){const match=await getPvpMatch(queued.matchId);if(match&&match.status==="waiting"){match.players.push(newPvpPlayer(user.uid,user.username));match.status="active";match.matchedAt=new Date().toISOString();await savePvpMatch(match);await setUserPvpMatch(user.uid,match.id);await clearPvpQueue(match.id);await safeRecordMetric(user.uid,"pvp_started",match.id);return res.status(200).json({pvp:publicPvp(match,user.uid)});}await clearPvpQueue(queued.matchId);}
+        const match={id:crypto.randomUUID(),status:"waiting",deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),players:[newPvpPlayer(user.uid,user.username)],createdAt:new Date().toISOString()};await savePvpMatch(match);await setUserPvpMatch(user.uid,match.id);await setPvpQueue({uid:user.uid,matchId:match.id});await safeRecordMetric(user.uid,"pvp_started",match.id);return res.status(200).json({pvp:publicPvp(match,user.uid)});
       }finally{await releasePvpLock(lockId);}
     }
     if(action==="pvp-bot"){
-      const match=await getUserPvpMatch(user.uid);if(!match||match.status!=="waiting")return res.status(409).json({error:"No waiting PvP match"});const lockId=await acquirePvpMatchLock(match.id);try{const fresh=await getPvpMatch(match.id);if(fresh.status!=="waiting")return res.status(200).json({pvp:publicPvp(fresh,user.uid)});const botMoves=12+crypto.randomInt(7),bot=newPvpPlayer(`bot:${fresh.id}`,"Arena Bot",true);bot.moves=botMoves;bot.score=Math.max(100,900-botMoves*25);fresh.players.push(bot);fresh.status="active";fresh.matchedAt=new Date().toISOString();await savePvpMatch(fresh);await clearPvpQueue(fresh.id);return res.status(200).json({pvp:publicPvp(fresh,user.uid)});}finally{await releasePvpMatchLock(match.id,lockId);}
+      const match=await getUserPvpMatch(user.uid);if(!match||match.status!=="waiting")return res.status(409).json({error:"No waiting PvP match"});const lockId=await acquirePvpMatchLock(match.id);try{const fresh=await getPvpMatch(match.id);if(fresh.status!=="waiting")return res.status(200).json({pvp:publicPvp(fresh,user.uid)});const botMoves=12+crypto.randomInt(7),bot=newPvpPlayer(`bot:${fresh.id}`,"Arena Bot",true);bot.moves=botMoves;bot.score=Math.max(100,900-botMoves*25);fresh.players.push(bot);fresh.status="active";fresh.matchedAt=new Date().toISOString();await savePvpMatch(fresh);await clearPvpQueue(fresh.id);await safeRecordMetric(user.uid,"pvp_bot_started",fresh.id);return res.status(200).json({pvp:publicPvp(fresh,user.uid)});}finally{await releasePvpMatchLock(match.id,lockId);}
     }
     if(action==="pvp-flip"){
       const index=Number(req.body?.index);
       if(!Number.isInteger(index)||index<0||index>=DAILY_SYMBOLS.length*2)return res.status(400).json({error:"Invalid card"});
       const result=await flipPvpCard(user.uid,index,MAX_MOVES);
+      const own=result.match.players.find(p=>p.uid===user.uid);if(result.reveal&&!result.reveal.pending&&own?.status!=="active")await safeRecordMetric(user.uid,"pvp_completed",result.match.id);
       return res.status(200).json({pvp:publicPvp(result.match,user.uid),reveal:result.reveal});
     }
     return res.status(400).json({error:"Unknown action"});
