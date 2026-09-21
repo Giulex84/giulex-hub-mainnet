@@ -33,6 +33,9 @@ const pvpUserKey = (uid) => `arena:pvp:user:${uid}`;
 const pvpQueueKey = "arena:pvp:queue";
 const pvpLockKey = "arena:pvp:matchmaking-lock";
 const pvpMatchLockKey = (id) => `arena:pvp:lock:${id}`;
+const metricsUniqueKey = (day) => `arena:metrics:unique:${day}`;
+const metricsEventsKey = (day) => `arena:metrics:events:${day}`;
+const metricsDedupeKey = (id) => `arena:metrics:dedupe:${id}`;
 
 async function hasPremium(uid) { if (!isStoreConfigured()) return false; return (await command(["GET", premiumKey(uid)])) === "1"; }
 async function claimPayment(uid, paymentId) { const key=paymentKey(paymentId), created=await command(["SET",key,uid,"NX"]); if(created==="OK")return true; const existing=await command(["GET",key]); if(existing!==uid)throw new Error("Payment already belongs to another user"); return false; }
@@ -157,4 +160,24 @@ return cjson.encode({match=match,reveal=reveal})`;
 }
 
 async function markPaymentPending(uid,paymentId){await claimPayment(uid,paymentId);}
-export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending};
+async function recordMetric(day,subject,event,dedupeId=""){
+  const script=`
+if ARGV[3]~="" then
+  local created=redis.call("SET",KEYS[3],"1","NX","EX",ARGV[4])
+  if not created then return 0 end
+end
+redis.call("PFADD",KEYS[1],ARGV[1])
+redis.call("EXPIRE",KEYS[1],ARGV[4])
+redis.call("HINCRBY",KEYS[2],ARGV[2],1)
+redis.call("EXPIRE",KEYS[2],ARGV[4])
+return 1`;
+  return Number(await command(["EVAL",script,3,metricsUniqueKey(day),metricsEventsKey(day),metricsDedupeKey(dedupeId||"none"),subject,event,dedupeId,34560000]))===1;
+}
+async function getMetricsReport(days){
+  const count=Math.max(1,Math.min(90,Math.trunc(Number(days)||30))),keys=[],labels=[];
+  for(let offset=0;offset<count;offset++){const date=new Date(Date.now()-offset*86400000).toISOString().slice(0,10);labels.push(date);keys.push(metricsUniqueKey(date),metricsEventsKey(date));}
+  const script=`local out={}; for i=1,#KEYS,2 do local unique=redis.call("PFCOUNT",KEYS[i]); local events=redis.call("HGETALL",KEYS[i+1]); table.insert(out,{unique=unique,events=events}) end; return cjson.encode(out)`;
+  const rows=JSON.parse(await command(["EVAL",script,keys.length,...keys]));
+  return labels.map((day,index)=>{const pairs=rows[index]?.events||[],events={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;return{day,uniqueUsers:Number(rows[index]?.unique)||0,events};});
+}
+export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};
