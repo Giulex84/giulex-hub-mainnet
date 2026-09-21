@@ -34,6 +34,7 @@ The Mainnet update is currently in review under Developer Portal version **1.0.2
 - Wildcard CORS was removed and baseline security headers were added.
 - Dynamic Pi usernames are rendered as text rather than injected HTML.
 - Daily and PvP card flips use atomic server-side state transitions to prevent concurrent-move corruption and reduce latency.
+- First-party backend telemetry counts pseudonymous daily users and aggregate product events without cookies or advertising trackers. Reports require the private `ARENA_METRICS_KEY` header.
 - Privacy Policy and Terms were updated to match actual data/payment behavior.
 
 ## Mainnet review checklist — submitted version 1.0.2
@@ -55,6 +56,7 @@ Copy `.env.example` values into your deployment provider:
 
 - `PI_API_KEY`: your existing Mainnet Server API Key from Pi Developer Portal.
 - `ARENA_KV_KV_REST_API_URL` and `ARENA_KV_KV_REST_API_TOKEN` (created automatically by Vercel/Upstash when using the `ARENA_KV` custom prefix): server-side Redis-compatible REST KV credentials.
+- `ARENA_METRICS_KEY`: a long random secret used only to read the private `/api/metrics` report. Telemetry collection does not expose this key to the browser.
 
 The persistent store protects both paid Premium entitlement and gameplay progress. If it is not configured, login/gameplay can still load, but Premium purchase is intentionally unavailable and gameplay cannot be restored across sessions.
 
