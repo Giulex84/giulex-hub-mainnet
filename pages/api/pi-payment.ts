@@ -2,15 +2,18 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { bearerFromRequest, getPayment, piPost, productForPayment, validateStorePayment, verifyPiAccessToken } from "../../lib/pi";
 import { claimPayment, getReplayCredits, grantPremium, grantReplayCredit, isStoreConfigured } from "../../lib/store";
+import { safeRecordMetric } from "../../lib/metrics";
 
 async function fulfill(payment) {
   const item = productForPayment(payment);
   if (!item) throw new Error("Unexpected payment product");
   if (item.type === "premium") {
     await grantPremium(payment.user_uid, payment.identifier);
+    await safeRecordMetric(payment.user_uid, "premium_purchased", payment.identifier);
     return { premium: true, product: item.product };
   }
   const replayCredits = await grantReplayCredit(payment.user_uid, payment.identifier);
+  await safeRecordMetric(payment.user_uid, "replay_purchased", payment.identifier);
   return { premium: false, replayCredits, product: item.product };
 }
 
