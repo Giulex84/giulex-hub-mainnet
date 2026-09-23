@@ -13,6 +13,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Daily Replay Ticket: **0.5 Pi U2A** consumable, verified and fulfilled server-side
 - Replay payments with any other amount are rejected by the Mainnet backend.
 - Daily Arena: server-controlled, persistent per UTC day, with best result and Top 10 leaderboard
+- Daily Arena now creates an attempt only after an explicit Start; opening the tab only restores an existing attempt. The interface shows 6-pair progress and preserves same-day resume.
 - Async PvP: shared server-controlled deck, real Pioneer matchmaking and disclosed Arena Bot fallback
 - Gameplay progress: persisted server-side and restored by verified Pi UID
 - Mainnet A2U gameplay rewards: **disabled intentionally** until explicitly authorized for the production app
@@ -57,6 +58,8 @@ Copy `.env.example` values into your deployment provider:
 - `PI_API_KEY`: your existing Mainnet Server API Key from Pi Developer Portal.
 - `ARENA_KV_KV_REST_API_URL` and `ARENA_KV_KV_REST_API_TOKEN` (created automatically by Vercel/Upstash when using the `ARENA_KV` custom prefix): server-side Redis-compatible REST KV credentials.
 - `ARENA_METRICS_KEY`: a long random secret used only to read the private `/api/metrics` report. Telemetry collection does not expose this key to the browser.
+
+The private report includes new/returning users, unique Daily and PvP funnels, completion and drop-off rates, average Daily completion time, D1/D3/D7 cohort retention, and first-party source attribution (`?source=fireside`, `?source=staking`, or direct). These expanded fields begin collecting from the release that introduced them; older aggregate event counts remain visible.
 
 The persistent store protects both paid Premium entitlement and gameplay progress. If it is not configured, login/gameplay can still load, but Premium purchase is intentionally unavailable and gameplay cannot be restored across sessions.
 

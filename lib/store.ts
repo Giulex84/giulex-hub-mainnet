@@ -36,6 +36,11 @@ const pvpMatchLockKey = (id) => `arena:pvp:lock:${id}`;
 const metricsUniqueKey = (day) => `arena:metrics:unique:${day}`;
 const metricsEventsKey = (day) => `arena:metrics:events:${day}`;
 const metricsDedupeKey = (id) => `arena:metrics:dedupe:${id}`;
+const metricsEventUsersKey = (day,event) => `arena:metrics:event-users:${day}:${event}`;
+const metricsNewUsersKey = (day) => `arena:metrics:new-users:${day}`;
+const metricsReturningUsersKey = (day) => `arena:metrics:returning-users:${day}`;
+const metricsFirstSeenKey = (subject) => `arena:metrics:first-seen:${subject}`;
+const metricsTimingsKey = (day) => `arena:metrics:timings:${day}`;
 
 async function hasPremium(uid) { if (!isStoreConfigured()) return false; return (await command(["GET", premiumKey(uid)])) === "1"; }
 async function claimPayment(uid, paymentId) { const key=paymentKey(paymentId), created=await command(["SET",key,uid,"NX"]); if(created==="OK")return true; const existing=await command(["GET",key]); if(existing!==uid)throw new Error("Payment already belongs to another user"); return false; }
@@ -160,24 +165,34 @@ return cjson.encode({match=match,reveal=reveal})`;
 }
 
 async function markPaymentPending(uid,paymentId){await claimPayment(uid,paymentId);}
-async function recordMetric(day,subject,event,dedupeId=""){
+async function recordMetric(day,subject,event,dedupeId="",value=0){
   const script=`
 if ARGV[3]~="" then
-  local created=redis.call("SET",KEYS[3],"1","NX","EX",ARGV[4])
+  local created=redis.call("SET",KEYS[3],"1","NX","EX",ARGV[6])
   if not created then return 0 end
 end
 redis.call("PFADD",KEYS[1],ARGV[1])
-redis.call("EXPIRE",KEYS[1],ARGV[4])
+redis.call("EXPIRE",KEYS[1],ARGV[6])
 redis.call("HINCRBY",KEYS[2],ARGV[2],1)
-redis.call("EXPIRE",KEYS[2],ARGV[4])
+redis.call("EXPIRE",KEYS[2],ARGV[6])
+redis.call("SADD",KEYS[4],ARGV[1]); redis.call("EXPIRE",KEYS[4],ARGV[6])
+local first=redis.call("GET",KEYS[7])
+if not first then
+  redis.call("SET",KEYS[7],ARGV[4],"EX",ARGV[6]); redis.call("SADD",KEYS[5],ARGV[1]); redis.call("EXPIRE",KEYS[5],ARGV[6])
+elseif first~=ARGV[4] then
+  redis.call("SADD",KEYS[6],ARGV[1]); redis.call("EXPIRE",KEYS[6],ARGV[6])
+end
+local numeric=tonumber(ARGV[5]) or 0
+if numeric>0 then redis.call("HINCRBYFLOAT",KEYS[8],ARGV[2]..":sum",numeric); redis.call("HINCRBY",KEYS[8],ARGV[2]..":count",1); redis.call("EXPIRE",KEYS[8],ARGV[6]) end
 return 1`;
-  return Number(await command(["EVAL",script,3,metricsUniqueKey(day),metricsEventsKey(day),metricsDedupeKey(dedupeId||"none"),subject,event,dedupeId,34560000]))===1;
+  return Number(await command(["EVAL",script,8,metricsUniqueKey(day),metricsEventsKey(day),metricsDedupeKey(dedupeId||"none"),metricsEventUsersKey(day,event),metricsNewUsersKey(day),metricsReturningUsersKey(day),metricsFirstSeenKey(subject),metricsTimingsKey(day),subject,event,dedupeId,day,Math.max(0,Number(value)||0),34560000]))===1;
 }
 async function getMetricsReport(days){
   const count=Math.max(1,Math.min(90,Math.trunc(Number(days)||30))),keys=[],labels=[];
-  for(let offset=0;offset<count;offset++){const date=new Date(Date.now()-offset*86400000).toISOString().slice(0,10);labels.push(date);keys.push(metricsUniqueKey(date),metricsEventsKey(date));}
-  const script=`local out={}; for i=1,#KEYS,2 do local unique=redis.call("PFCOUNT",KEYS[i]); local events=redis.call("HGETALL",KEYS[i+1]); table.insert(out,{unique=unique,events=events}) end; return cjson.encode(out)`;
+  const dateAt=(offset)=>new Date(Date.now()-offset*86400000).toISOString().slice(0,10);
+  for(let offset=0;offset<count;offset++){const date=dateAt(offset);labels.push(date);keys.push(metricsUniqueKey(date),metricsEventsKey(date),metricsNewUsersKey(date),metricsReturningUsersKey(date),metricsEventUsersKey(date,"daily_started"),metricsEventUsersKey(date,"daily_completed"),metricsEventUsersKey(date,"pvp_started"),metricsEventUsersKey(date,"pvp_completed"),metricsTimingsKey(date),metricsEventUsersKey(dateAt(offset-1),"login"),metricsEventUsersKey(dateAt(offset-3),"login"),metricsEventUsersKey(dateAt(offset-7),"login"));}
+  const script=`local out={}; for i=1,#KEYS,12 do local unique=redis.call("PFCOUNT",KEYS[i]); local events=redis.call("HGETALL",KEYS[i+1]); local timings=redis.call("HGETALL",KEYS[i+8]); table.insert(out,{unique=unique,events=events,newUsers=redis.call("SCARD",KEYS[i+2]),returningUsers=redis.call("SCARD",KEYS[i+3]),dailyStarters=redis.call("SCARD",KEYS[i+4]),dailyCompleters=redis.call("SCARD",KEYS[i+5]),pvpStarters=redis.call("SCARD",KEYS[i+6]),pvpCompleters=redis.call("SCARD",KEYS[i+7]),timings=timings,d1=#redis.call("SINTER",KEYS[i+2],KEYS[i+9]),d3=#redis.call("SINTER",KEYS[i+2],KEYS[i+10]),d7=#redis.call("SINTER",KEYS[i+2],KEYS[i+11])}) end; return cjson.encode(out)`;
   const rows=JSON.parse(await command(["EVAL",script,keys.length,...keys]));
-  return labels.map((day,index)=>{const pairs=rows[index]?.events||[],events={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;return{day,uniqueUsers:Number(rows[index]?.unique)||0,events};});
+  return labels.map((day,index)=>{const row=rows[index]||{},pairs=row.events||[],timingPairs=row.timings||[],events={},timings={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;for(let i=0;i<timingPairs.length;i+=2)timings[timingPairs[i]]=Number(timingPairs[i+1])||0;const durationCount=timings["daily_completed:count"]||0;return{day,uniqueUsers:Number(row.unique)||0,newUsers:Number(row.newUsers)||0,returningUsers:Number(row.returningUsers)||0,dailyStarters:Number(row.dailyStarters)||0,dailyCompleters:Number(row.dailyCompleters)||0,pvpStarters:Number(row.pvpStarters)||0,pvpCompleters:Number(row.pvpCompleters)||0,averageDailySeconds:durationCount?Math.round((timings["daily_completed:sum"]||0)/durationCount):0,d1:Number(row.d1)||0,d3:Number(row.d3)||0,d7:Number(row.d7)||0,events};});
 }
 export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};

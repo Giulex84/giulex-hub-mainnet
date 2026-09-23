@@ -11,7 +11,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const user = await verifyPiAccessToken(token);
     const storeReady = isStoreConfigured();
-    if (storeReady) { await saveProfile(user.uid, user.username || null); await safeRecordMetric(user.uid, "login"); }
+    if (storeReady) {
+      const requestedSource = typeof req.body?.source === "string" ? req.body.source.toLowerCase() : "direct";
+      const source = ["fireside", "staking"].includes(requestedSource) ? requestedSource : "direct";
+      await saveProfile(user.uid, user.username || null);
+      await Promise.all([safeRecordMetric(user.uid, "login"), safeRecordMetric(user.uid, `source_${source}`, new Date().toISOString().slice(0,10))]);
+    }
     return res.status(200).json({
       uid: user.uid,
       username: user.username || null,
