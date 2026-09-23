@@ -237,6 +237,8 @@
             <div class="metric">DAILY COMPLETION<b id="dailyRate">0%</b></div>
             <div class="metric">DAILY DROP-OFF<b id="dailyDropoff">0</b></div>
             <div class="metric">AVG DAILY TIME<b id="dailyTime">—</b></div>
+            <div class="metric">PVP STARTERS<b id="pvpStarters">0</b></div>
+            <div class="metric">PVP COMPLETERS<b id="pvpCompleters">0</b></div>
             <div class="metric">PVP COMPLETION<b id="pvpRate">0%</b></div>
             <div class="metric">D1 RETENTION<b id="d1">—</b></div>
             <div class="metric">D3 RETENTION<b id="d3">—</b></div>
@@ -360,8 +362,10 @@
               return tr;
             }),
           );
-          for (const key of Object.keys(totals))
-            $(key).textContent = String(totals[key]);
+          for (const key of Object.keys(totals)) {
+            const target = $(key);
+            if (target) target.textContent = String(totals[key]);
+          }
           $("dailyRate").textContent = totals.dailyStarters ? `${Math.round(totals.dailyCompleters / totals.dailyStarters * 100)}%` : "—";
           $("dailyDropoff").textContent = String(Math.max(0, totals.dailyStarters - totals.dailyCompleters));
           $("dailyTime").textContent = durationDays ? `${Math.round(durationSum / durationDays)}s` : "—";
