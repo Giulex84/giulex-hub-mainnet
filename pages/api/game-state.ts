@@ -1,7 +1,7 @@
 // @ts-nocheck
 const crypto = require("crypto");
 const { bearerFromRequest, arenaSessionFromRequest, verifyArenaSession, verifyAccessToken } = require("../../lib/pi");
-const { getGameState, saveGameState, getDailyChallenge, saveDailyChallenge, acquireDailyLock, releaseDailyLock, flipDailyCard, getReplayCredits, consumeReplayCredit, recordDailyAttempt, recordDailyResult, getDailyMeta, getDailyLeaderboard, getPvpMatch, savePvpMatch, getUserPvpMatch, setUserPvpMatch, clearUserPvpMatch, getPvpQueue, setPvpQueue, clearPvpQueue, acquirePvpLock, releasePvpLock, acquirePvpMatchLock, releasePvpMatchLock, flipPvpCard, isStoreConfigured } = require("../../lib/store");
+const { getGameState, saveGameState, getDailyChallenge, saveDailyChallenge, acquireDailyLock, releaseDailyLock, flipDailyCard, getReplayCredits, consumeReplayCredit, recordDailyAttempt, recordDailyResult, recordDailyCompletion, getDailyMeta, getDailyLeaderboard, getPvpMatch, savePvpMatch, getUserPvpMatch, setUserPvpMatch, clearUserPvpMatch, getPvpQueue, setPvpQueue, clearPvpQueue, acquirePvpLock, releasePvpLock, acquirePvpMatchLock, releasePvpMatchLock, flipPvpCard, isStoreConfigured } = require("../../lib/store");
 const { safeRecordMetric } = require("../../lib/metrics");
 
 const DAILY_SYMBOLS=["⚔","🔥","🛡","🏹","👑","💎"];
@@ -54,6 +54,7 @@ export default async function handler(req,res){
     if(action==="save")return res.status(200).json({ok:true,state:await saveGameState(user.uid,req.body?.state||{})});
     const day=today();
     if(action==="daily-leaderboard")return res.status(200).json(await getDailyLeaderboard(user.uid,day));
+    if(action==="daily-share"){await safeRecordMetric(user.uid,"daily_shared",`${day}:${user.uid}`);return res.status(200).json({ok:true});}
     if(action==="daily-status"){
       let daily=await getDailyChallenge(user.uid,day);
       const meta=await getDailyMeta(user.uid,day);if(daily?.status==="completed"&&!meta.best)meta.best=await recordDailyResult(user.uid,day,daily);
@@ -71,7 +72,7 @@ export default async function handler(req,res){
       const index=Number(req.body?.index);
       if(!Number.isInteger(index)||index<0||index>=DAILY_SYMBOLS.length*2)return res.status(400).json({error:"Invalid card"});
       const result=await flipDailyCard(user.uid,day,index,MAX_MOVES),daily=result.daily;
-      const meta=daily.status==="completed"?{attempts:(await getDailyMeta(user.uid,day)).attempts,best:await recordDailyResult(user.uid,day,daily)}:null;
+      let meta=null;if(daily.status==="completed"){await recordDailyResult(user.uid,day,daily);if(result.reveal&&!result.reveal.pending)await recordDailyCompletion(user.uid,day);meta=await getDailyMeta(user.uid,day);}
       if(result.reveal&&!result.reveal.pending&&daily.status==="completed")await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day,Math.max(1,Math.round((Date.parse(daily.completedAt)-Date.parse(daily.startedAt))/1000)));
       if(result.reveal&&!result.reveal.pending&&daily.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day);
       return res.status(200).json({daily:publicDaily(daily),meta,reveal:result.reveal});

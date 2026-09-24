@@ -293,6 +293,8 @@
             <div class="metric">RITORNO D7<b id="d7">—</b></div>
             <div class="metric">FIRESIDE<b id="fireside">0</b></div>
             <div class="metric">STAKING<b id="staking">0</b></div>
+            <div class="metric">LINK CONDIVISI<b id="share">0</b></div>
+            <div class="metric">CONDIVISIONI DAILY<b id="dailyShares">0</b></div>
             <div class="metric">DIRETTO / ALTRO<b id="direct">0</b></div>
             <div class="metric">VENDITE PREMIUM<b id="premium">0</b></div>
             <div class="metric">VENDITE REPLAY<b id="replays">0</b></div>
@@ -357,6 +359,8 @@
             pvpCompleters: 0,
             fireside: 0,
             staking: 0,
+            share: 0,
+            dailyShares: 0,
             direct: 0,
             premium: 0,
             replays: 0,
@@ -380,6 +384,8 @@
               totals.pvpCompleters += pvpCompleters;
               totals.fireside += n(e, "source_fireside");
               totals.staking += n(e, "source_staking");
+              totals.share += n(e, "source_share");
+              totals.dailyShares += n(e, "daily_shared");
               totals.direct += n(e, "source_direct");
               totals.premium += n(e, "premium_purchased");
               totals.replays += n(e, "replay_purchased");

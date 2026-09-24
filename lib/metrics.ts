@@ -8,6 +8,7 @@ const EVENTS = new Set([
   "daily_completed",
   "daily_failed",
   "daily_replay_started",
+  "daily_shared",
   "pvp_started",
   "pvp_bot_started",
   "pvp_completed",
@@ -15,6 +16,7 @@ const EVENTS = new Set([
   "replay_purchased",
   "source_fireside",
   "source_staking",
+  "source_share",
   "source_direct",
 ]);
 
