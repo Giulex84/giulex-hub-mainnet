@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -7,7 +7,7 @@
       content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
     />
     <meta name="robots" content="noindex,nofollow,noarchive" />
-    <title>Arena · Private Metrics</title>
+    <title>Arena · Metriche private</title>
     <script src="https://sdk.minepi.com/pi-sdk.js"></script>
     <script>
       Pi.init({ version: "2.0", sandbox: false });
@@ -199,6 +199,54 @@
         .panel {
           padding: 15px;
         }
+        .table-wrap {
+          overflow: visible;
+          border: 0;
+        }
+        table,
+        tbody,
+        tr,
+        td {
+          display: block;
+          width: 100%;
+        }
+        table {
+          min-width: 0;
+        }
+        thead {
+          display: none;
+        }
+        tbody {
+          display: grid;
+          gap: 12px;
+        }
+        tbody tr {
+          padding: 12px 14px;
+          border: 1px solid var(--line);
+          border-radius: 15px;
+          background: #0a0e20;
+        }
+        tbody td {
+          display: flex;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 8px 0;
+          text-align: right;
+          white-space: normal;
+        }
+        tbody td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          text-align: left;
+          font-weight: 700;
+        }
+        tbody td:first-child {
+          padding-bottom: 11px;
+          margin-bottom: 4px;
+          border-bottom: 1px solid #ffffff20;
+          color: var(--cyan);
+          font-weight: 900;
+        }
       }
     </style>
   </head>
@@ -207,75 +255,75 @@
       <header class="hero">
         <div class="logo">📊</div>
         <div>
-          <h1>Arena Metrics</h1>
-          <p>Private aggregate telemetry</p>
+          <h1>Metriche Arena</h1>
+          <p>Telemetria aggregata privata</p>
         </div>
         <span class="badge">ADMIN</span>
       </header>
       <section class="panel">
         <div id="gate">
-          <button id="login" class="action">VERIFY WITH PI</button>
+          <button id="login" class="action">VERIFICA CON PI</button>
           <div id="gateStatus" class="status">
-            Restricted to the Arena owner.
+            Accesso riservato al proprietario di Arena.
           </div>
         </div>
         <div id="dashboard" class="hidden">
           <div class="toolbar">
-            <select id="days" aria-label="Report period">
-              <option value="7">Last 7 days</option>
-              <option value="30" selected>Last 30 days</option>
-              <option value="90">Last 90 days</option></select
-            ><button id="refresh" type="button">Refresh</button>
+            <select id="days" aria-label="Periodo del rapporto">
+              <option value="7">Ultimi 7 giorni</option>
+              <option value="30" selected>Ultimi 30 giorni</option>
+              <option value="90">Ultimi 90 giorni</option></select
+            ><button id="refresh" type="button">Aggiorna</button>
           </div>
           <div class="cards">
-            <div class="metric">DAILY UNIQUES (SUM)<b id="unique">0</b></div>
-            <div class="metric">LOGINS<b id="logins">0</b></div>
-            <div class="metric">NEW USERS<b id="newUsers">0</b></div>
-            <div class="metric">RETURNING USERS<b id="returningUsers">0</b></div>
-            <div class="metric">DAILY STARTERS<b id="dailyStarters">0</b></div>
-            <div class="metric">DAILY COMPLETERS<b id="dailyCompleters">0</b></div>
-            <div class="metric">DAILY COMPLETION<b id="dailyRate">0%</b></div>
-            <div class="metric">DAILY DROP-OFF<b id="dailyDropoff">0</b></div>
-            <div class="metric">AVG DAILY TIME<b id="dailyTime">—</b></div>
-            <div class="metric">PVP STARTERS<b id="pvpStarters">0</b></div>
-            <div class="metric">PVP COMPLETERS<b id="pvpCompleters">0</b></div>
-            <div class="metric">PVP COMPLETION<b id="pvpRate">0%</b></div>
-            <div class="metric">D1 RETENTION<b id="d1">—</b></div>
-            <div class="metric">D3 RETENTION<b id="d3">—</b></div>
-            <div class="metric">D7 RETENTION<b id="d7">—</b></div>
+            <div class="metric">UTENTI GIORNALIERI (SOMMA)<b id="unique">0</b></div>
+            <div class="metric">ACCESSI<b id="logins">0</b></div>
+            <div class="metric">NUOVI UTENTI<b id="newUsers">0</b></div>
+            <div class="metric">UTENTI DI RITORNO<b id="returningUsers">0</b></div>
+            <div class="metric">DAILY AVVIATE<b id="dailyStarters">0</b></div>
+            <div class="metric">DAILY COMPLETATE<b id="dailyCompleters">0</b></div>
+            <div class="metric">COMPLETAMENTO DAILY<b id="dailyRate">0%</b></div>
+            <div class="metric">ABBANDONI DAILY<b id="dailyDropoff">0</b></div>
+            <div class="metric">TEMPO MEDIO DAILY<b id="dailyTime">—</b></div>
+            <div class="metric">PVP AVVIATI<b id="pvpStarters">0</b></div>
+            <div class="metric">PVP COMPLETATI<b id="pvpCompleters">0</b></div>
+            <div class="metric">COMPLETAMENTO PVP<b id="pvpRate">0%</b></div>
+            <div class="metric">RITORNO D1<b id="d1">—</b></div>
+            <div class="metric">RITORNO D3<b id="d3">—</b></div>
+            <div class="metric">RITORNO D7<b id="d7">—</b></div>
             <div class="metric">FIRESIDE<b id="fireside">0</b></div>
             <div class="metric">STAKING<b id="staking">0</b></div>
-            <div class="metric">DIRECT / OTHER<b id="direct">0</b></div>
-            <div class="metric">PREMIUM SALES<b id="premium">0</b></div>
-            <div class="metric">REPLAY SALES<b id="replays">0</b></div>
+            <div class="metric">DIRETTO / ALTRO<b id="direct">0</b></div>
+            <div class="metric">VENDITE PREMIUM<b id="premium">0</b></div>
+            <div class="metric">VENDITE REPLAY<b id="replays">0</b></div>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>UTC day</th>
-                  <th>Users</th>
-                  <th>New</th>
-                  <th>Returning</th>
-                  <th>Logins</th>
-                  <th>Daily starters</th>
-                  <th>Daily completers</th>
+                  <th>Giorno UTC</th>
+                  <th>Utenti</th>
+                  <th>Nuovi</th>
+                  <th>Di ritorno</th>
+                  <th>Accessi</th>
+                  <th>Daily avviate</th>
+                  <th>Daily completate</th>
                   <th>Daily %</th>
-                  <th>Avg time</th>
-                  <th>PvP starters</th>
-                  <th>PvP completers</th>
+                  <th>Tempo medio</th>
+                  <th>PvP avviati</th>
+                  <th>PvP completati</th>
                   <th>Premium</th>
-                  <th>Replays</th>
+                  <th>Replay</th>
                 </tr>
               </thead>
               <tbody id="rows"></tbody>
             </table>
           </div>
-          <div id="reportStatus" class="status">Loading…</div>
+          <div id="reportStatus" class="status">Caricamento…</div>
         </div>
         <div class="note">
-          Aggregate counts only. Pi access tokens are used for verification and
-          are not displayed.
+          Solo conteggi aggregati. I token di accesso Pi vengono usati per la
+          verifica e non sono visualizzati.
         </div>
       </section>
     </main>
@@ -285,7 +333,7 @@
       const n = (events, key) => Number(events && events[key]) || 0;
       async function loadReport() {
         if (!accessToken) return;
-        $("reportStatus").textContent = "Loading…";
+        $("reportStatus").textContent = "Caricamento…";
         try {
           const response = await fetch(
               `/api/metrics?days=${encodeURIComponent($("days").value)}`,
@@ -295,8 +343,8 @@
           if (!response.ok)
             throw new Error(
               response.status === 403
-                ? "Access denied: this Pi account is not the Arena administrator."
-                : data.error || `Request failed (${response.status})`,
+                ? "Accesso negato: questo account Pi non è l’amministratore di Arena."
+                : data.error || `Richiesta non riuscita (${response.status})`,
             );
           const totals = {
             unique: 0,
@@ -340,7 +388,7 @@
               for (const days of [1, 3, 7]) if (age >= days) { retention[`d${days}`][0] += Number(row[`d${days}`]) || 0; retention[`d${days}`][1] += Number(row.newUsers) || 0; }
               const tr = document.createElement("tr");
               const dailyRate = dailyStarters ? `${Math.round(dailyCompleters / dailyStarters * 100)}%` : "—";
-              for (const value of [
+              const values = [
                 row.day,
                 row.uniqueUsers,
                 row.newUsers,
@@ -354,11 +402,18 @@
                 pvpCompleters,
                 n(e, "premium_purchased"),
                 n(e, "replay_purchased"),
-              ]) {
+              ];
+              const labels = [
+                "Giorno UTC", "Utenti", "Nuovi", "Di ritorno", "Accessi",
+                "Daily avviate", "Daily completate", "Completamento Daily",
+                "Tempo medio", "PvP avviati", "PvP completati", "Premium", "Replay",
+              ];
+              values.forEach((value, index) => {
                 const td = document.createElement("td");
                 td.textContent = String(value || 0);
+                td.dataset.label = labels[index];
                 tr.appendChild(td);
-              }
+              });
               return tr;
             }),
           );
@@ -372,7 +427,7 @@
           $("pvpRate").textContent = totals.pvpStarters ? `${Math.round(totals.pvpCompleters / totals.pvpStarters * 100)}%` : "—";
           for (const key of ["d1", "d3", "d7"]) $(key).textContent = retention[key][1] ? `${Math.round(retention[key][0] / retention[key][1] * 100)}%` : "—";
           $("reportStatus").textContent =
-            `Updated ${new Date(data.generatedAt).toLocaleString()} · ${data.rows.length} UTC days · unique funnel, retention, timing and source tracking start with this release`;
+            `Aggiornato ${new Date(data.generatedAt).toLocaleString("it-IT")} · ${data.rows.length} giorni UTC · funnel, ritorno, tempi e provenienza sono disponibili dall’attivazione del nuovo tracciamento`;
         } catch (error) {
           $("reportStatus").textContent = error.message;
           $("reportStatus").classList.add("error");
@@ -380,10 +435,10 @@
       }
       $("login").onclick = async () => {
         try {
-          $("gateStatus").textContent = "Verifying with Pi…";
+          $("gateStatus").textContent = "Verifica con Pi in corso…";
           const auth = await Pi.authenticate(["username"], () => {});
           if (!auth?.accessToken)
-            throw new Error("Pi did not return an access token");
+            throw new Error("Pi non ha restituito un token di accesso");
           accessToken = auth.accessToken;
           $("gate").classList.add("hidden");
           $("dashboard").classList.remove("hidden");
