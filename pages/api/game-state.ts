@@ -53,6 +53,12 @@ export default async function handler(req,res){
     if(action==="load")return res.status(200).json({state:await getGameState(user.uid)});
     if(action==="save")return res.status(200).json({ok:true,state:await saveGameState(user.uid,req.body?.state||{})});
     const day=today();
+    if(action==="client-event"){
+      const event=String(req.body?.event||"");
+      if(!new Set(["daily_viewed","daily_timeout","daily_recovered","pvp_timeout","pvp_recovered"]).has(event))return res.status(400).json({error:"Invalid event"});
+      await safeRecordMetric(user.uid,event,`${day}:${event}`);
+      return res.status(200).json({ok:true});
+    }
     if(action==="daily-leaderboard")return res.status(200).json(await getDailyLeaderboard(user.uid,day));
     if(action==="daily-share"){await safeRecordMetric(user.uid,"daily_shared",`${day}:${user.uid}`);return res.status(200).json({ok:true});}
     if(action==="daily-status"){
@@ -72,6 +78,7 @@ export default async function handler(req,res){
       const index=Number(req.body?.index);
       if(!Number.isInteger(index)||index<0||index>=DAILY_SYMBOLS.length*2)return res.status(400).json({error:"Invalid card"});
       const result=await flipDailyCard(user.uid,day,index,MAX_MOVES),daily=result.daily;
+      if(result.reveal?.pending&&daily.moves===0&&daily.matched.length===0)await safeRecordMetric(user.uid,"daily_first_flip",day);
       let meta=null;if(daily.status==="completed"){await recordDailyResult(user.uid,day,daily);if(result.reveal&&!result.reveal.pending)await recordDailyCompletion(user.uid,day);meta=await getDailyMeta(user.uid,day);}
       if(result.reveal&&!result.reveal.pending&&daily.status==="completed")await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day,Math.max(1,Math.round((Date.parse(daily.completedAt)-Date.parse(daily.startedAt))/1000)));
       if(result.reveal&&!result.reveal.pending&&daily.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day);

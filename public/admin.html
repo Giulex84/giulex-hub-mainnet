@@ -281,6 +281,8 @@
             <div class="metric">NUOVI UTENTI<b id="newUsers">0</b></div>
             <div class="metric">UTENTI DI RITORNO<b id="returningUsers">0</b></div>
             <div class="metric">DAILY AVVIATE<b id="dailyStarters">0</b></div>
+            <div class="metric">APERTURE DAILY<b id="dailyViews">0</b></div>
+            <div class="metric">PRIMO TOCCO DAILY<b id="dailyFirstFlips">0</b></div>
             <div class="metric">DAILY COMPLETATE<b id="dailyCompleters">0</b></div>
             <div class="metric">COMPLETAMENTO DAILY<b id="dailyRate">0%</b></div>
             <div class="metric">ABBANDONI DAILY<b id="dailyDropoff">0</b></div>
@@ -295,6 +297,8 @@
             <div class="metric">STAKING<b id="staking">0</b></div>
             <div class="metric">LINK CONDIVISI<b id="share">0</b></div>
             <div class="metric">CONDIVISIONI DAILY<b id="dailyShares">0</b></div>
+            <div class="metric">TIMEOUT DAILY<b id="dailyTimeouts">0</b></div>
+            <div class="metric">RECUPERI DAILY<b id="dailyRecoveries">0</b></div>
             <div class="metric">DIRETTO / ALTRO<b id="direct">0</b></div>
             <div class="metric">VENDITE PREMIUM<b id="premium">0</b></div>
             <div class="metric">VENDITE REPLAY<b id="replays">0</b></div>
@@ -354,6 +358,8 @@
             newUsers: 0,
             returningUsers: 0,
             dailyStarters: 0,
+            dailyViews: 0,
+            dailyFirstFlips: 0,
             dailyCompleters: 0,
             pvpStarters: 0,
             pvpCompleters: 0,
@@ -361,6 +367,8 @@
             staking: 0,
             share: 0,
             dailyShares: 0,
+            dailyTimeouts: 0,
+            dailyRecoveries: 0,
             direct: 0,
             premium: 0,
             replays: 0,
@@ -379,6 +387,8 @@
               const pvpStarters = Number(row.pvpStarters) || n(e, "pvp_started");
               const pvpCompleters = Number(row.pvpCompleters) || n(e, "pvp_completed");
               totals.dailyStarters += dailyStarters;
+              totals.dailyViews += n(e, "daily_viewed");
+              totals.dailyFirstFlips += n(e, "daily_first_flip");
               totals.dailyCompleters += dailyCompleters;
               totals.pvpStarters += pvpStarters;
               totals.pvpCompleters += pvpCompleters;
@@ -386,6 +396,8 @@
               totals.staking += n(e, "source_staking");
               totals.share += n(e, "source_share");
               totals.dailyShares += n(e, "daily_shared");
+              totals.dailyTimeouts += n(e, "daily_timeout");
+              totals.dailyRecoveries += n(e, "daily_recovered");
               totals.direct += n(e, "source_direct");
               totals.premium += n(e, "premium_purchased");
               totals.replays += n(e, "replay_purchased");
