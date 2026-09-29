@@ -54,7 +54,7 @@ async function getGameState(uid){if(!isStoreConfigured())return null;const raw=a
 async function saveGameState(uid,state){
   const level=Math.max(1,Math.min(100,Math.trunc(Number(state?.level)||1))),lives=Math.max(0,Math.min(999,Math.trunc(Number(state?.lives)||0))),score=Math.max(0,Math.min(1000000000,Math.trunc(Number(state?.score)||0))),current=await getGameState(uid),currentLevel=Math.max(1,Number(current?.level)||1),currentScore=Math.max(0,Number(current?.score)||0);
   if(level>currentLevel+1){const error=new Error("Invalid Classic progression");error.statusCode=400;throw error;}
-  if(score<currentScore||score>maxClassicScore(Math.min(100,level+1))){const error=new Error("Invalid Classic score");error.statusCode=400;throw error;}
+  if(score<currentScore||score>maxClassicScore(level+1)){const error=new Error("Invalid Classic score");error.statusCode=400;throw error;}
   const value=JSON.stringify({level,lives,score,updatedAt:new Date().toISOString()});await command(["SET",gameStateKey(uid),value]);return{level,lives,score};
 }
 
