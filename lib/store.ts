@@ -25,6 +25,9 @@ const dailyLockKey = (uid, day) => `arena:daily-lock:${day}:${uid}`;
 const replayCreditsKey = (uid) => `arena:daily-replay-credits:${uid}`;
 const replayFulfilledKey = (paymentId) => `arena:daily-replay-fulfilled:${paymentId}`;
 const profileKey = (uid) => `arena:profile:${uid}`;
+const classicBestKey = (uid,week) => `arena:classic-best:${week}:${uid}`;
+const classicCompletionKey = (uid,week,level) => `arena:classic-complete:${week}:${level}:${uid}`;
+const classicLeaderboardKey = (week) => `arena:classic-leaderboard:${week}`;
 const dailyAttemptsKey = (uid,day) => `arena:daily-attempts:${day}:${uid}`;
 const dailyBestKey = (uid,day) => `arena:daily-best:${day}:${uid}`;
 const dailyLeaderboardKey = (day) => `arena:daily-leaderboard:${day}`;
@@ -100,6 +103,32 @@ async function getReplayCredits(uid){return Math.max(0,Number((await command(["G
 async function grantReplayCredit(uid,paymentId){await claimPayment(uid,paymentId);const created=await command(["SET",replayFulfilledKey(paymentId),uid,"NX"]);if(created==="OK")await command(["INCR",replayCreditsKey(uid)]);else{const owner=await command(["GET",replayFulfilledKey(paymentId)]);if(owner!==uid)throw new Error("Replay fulfillment belongs to another user");}return getReplayCredits(uid);}
 async function consumeReplayCredit(uid){const count=await getReplayCredits(uid);if(count<1)throw new Error("A Daily Replay Ticket is required");await command(["DECR",replayCreditsKey(uid)]);return count-1;}
 async function saveProfile(uid,username){const value=JSON.stringify({uid,username:typeof username==="string"?username.slice(0,64):null});await command(["SET",profileKey(uid),value]);}
+function classicWeekStart(){const date=new Date(),offset=(date.getUTCDay()+6)%7;date.setUTCDate(date.getUTCDate()-offset);return date.toISOString().slice(0,10);}
+function maxClassicScore(levelReached){const completed=Math.max(0,Math.trunc(Number(levelReached)||1)-1);let total=0;for(let level=1;level<=completed;level++){const pairs=level===1?2:level<=3?8:10;total+=20*pairs*(pairs+1)/2+(pairs>=3?50:0);}return total;}
+async function getClassicLeaderboard(uid,week=classicWeekStart()){
+  const ids=await command(["ZREVRANGE",classicLeaderboardKey(week),0,9]),list=Array.isArray(ids)?ids:[],keys=[];
+  for(const id of list)keys.push(profileKey(id),classicBestKey(id,week));
+  const values=keys.length?await command(["MGET",...keys]):[];
+  const leaders=list.map((id,index)=>{let profile=null,best=null;try{profile=values?.[index*2]?JSON.parse(values[index*2]):null;}catch{}try{best=values?.[index*2+1]?JSON.parse(values[index*2+1]):null;}catch{}return{rank:index+1,username:profile?.username||"Pioneer",score:best?.score||0,level:best?.level||1};});
+  const ownRank=await command(["ZREVRANK",classicLeaderboardKey(week),uid]),ownRaw=await command(["GET",classicBestKey(uid,week)]);let ownBest=null;try{ownBest=ownRaw?JSON.parse(ownRaw):null;}catch{}
+  return{week,leaders,position:ownRank===null?null:Number(ownRank)+1,ownBest};
+}
+async function recordClassicResult(uid,levelReached,scoreValue){
+  const level=Math.trunc(Number(levelReached)),score=Math.trunc(Number(scoreValue)),week=classicWeekStart();
+  if(!Number.isInteger(level)||level<2||level>100||!Number.isInteger(score)||score<0){const error=new Error("Invalid Classic result");error.statusCode=400;throw error;}
+  if(score>maxClassicScore(level)){const error=new Error("Classic score is outside the valid range");error.statusCode=400;throw error;}
+  const accepted=await command(["SET",classicCompletionKey(uid,week,level),String(score),"NX","EX",1209600]);
+  if(accepted==="OK"){
+    const raw=await command(["GET",classicBestKey(uid,week)]);let current=null;try{current=raw?JSON.parse(raw):null;}catch{}
+    const next={level,score,completedAt:new Date().toISOString()};
+    if(!current||score>Number(current.score)||(score===Number(current.score)&&level>Number(current.level))){
+      await command(["SET",classicBestKey(uid,week),JSON.stringify(next),"EX",1209600]);
+      await command(["ZADD",classicLeaderboardKey(week),score*1000+level,uid]);
+      await command(["EXPIRE",classicLeaderboardKey(week),1209600]);
+    }
+  }
+  return getClassicLeaderboard(uid,week);
+}
 async function recordDailyAttempt(uid,day){const count=Number(await command(["INCR",dailyAttemptsKey(uid,day)]));if(count===1)await command(["EXPIRE",dailyAttemptsKey(uid,day),259200]);return count;}
 async function getDailyBest(uid,day){const raw=await command(["GET",dailyBestKey(uid,day)]);if(!raw)return null;try{return JSON.parse(raw);}catch{return null;}}
 function isBetterDailyResult(next,current){return!current||next.moves<current.moves||(next.moves===current.moves&&next.score>current.score);}
@@ -198,4 +227,4 @@ async function getMetricsReport(days){
   const rows=JSON.parse(await command(["EVAL",script,keys.length,...keys]));
   return labels.map((day,index)=>{const row=rows[index]||{},pairs=row.events||[],timingPairs=row.timings||[],events={},timings={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;for(let i=0;i<timingPairs.length;i+=2)timings[timingPairs[i]]=Number(timingPairs[i+1])||0;const durationCount=timings["daily_completed:count"]||0;return{day,uniqueUsers:Number(row.unique)||0,newUsers:Number(row.newUsers)||0,returningUsers:Number(row.returningUsers)||0,dailyStarters:Number(row.dailyStarters)||0,dailyCompleters:Number(row.dailyCompleters)||0,pvpStarters:Number(row.pvpStarters)||0,pvpCompleters:Number(row.pvpCompleters)||0,averageDailySeconds:durationCount?Math.round((timings["daily_completed:sum"]||0)/durationCount):0,d1:Number(row.d1)||0,d3:Number(row.d3)||0,d7:Number(row.d7)||0,events};});
 }
-export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,recordDailyCompletion,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};
+export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getClassicLeaderboard,recordClassicResult,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,recordDailyCompletion,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};

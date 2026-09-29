@@ -1,7 +1,7 @@
 // @ts-nocheck
 const crypto = require("crypto");
 const { bearerFromRequest, arenaSessionFromRequest, verifyArenaSession, verifyAccessToken } = require("../../lib/pi");
-const { getGameState, saveGameState, getDailyChallenge, saveDailyChallenge, acquireDailyLock, releaseDailyLock, flipDailyCard, getReplayCredits, consumeReplayCredit, recordDailyAttempt, recordDailyResult, recordDailyCompletion, getDailyMeta, getDailyLeaderboard, getPvpMatch, savePvpMatch, getUserPvpMatch, setUserPvpMatch, clearUserPvpMatch, getPvpQueue, setPvpQueue, clearPvpQueue, acquirePvpLock, releasePvpLock, acquirePvpMatchLock, releasePvpMatchLock, flipPvpCard, isStoreConfigured } = require("../../lib/store");
+const { getGameState, saveGameState, getClassicLeaderboard, recordClassicResult, getDailyChallenge, saveDailyChallenge, acquireDailyLock, releaseDailyLock, flipDailyCard, getReplayCredits, consumeReplayCredit, recordDailyAttempt, recordDailyResult, recordDailyCompletion, getDailyMeta, getDailyLeaderboard, getPvpMatch, savePvpMatch, getUserPvpMatch, setUserPvpMatch, clearUserPvpMatch, getPvpQueue, setPvpQueue, clearPvpQueue, acquirePvpLock, releasePvpLock, acquirePvpMatchLock, releasePvpMatchLock, flipPvpCard, isStoreConfigured } = require("../../lib/store");
 const { safeRecordMetric } = require("../../lib/metrics");
 
 const DAILY_SYMBOLS=["⚔","🔥","🛡","🏹","👑","💎"];
@@ -52,6 +52,16 @@ export default async function handler(req,res){
     const user=sessionToken?verifyArenaSession(sessionToken):await verifyAccessToken(token),action=req.body?.action||"load";
     if(action==="load")return res.status(200).json({state:await getGameState(user.uid)});
     if(action==="save")return res.status(200).json({ok:true,state:await saveGameState(user.uid,req.body?.state||{})});
+    if(action==="classic-leaderboard")return res.status(200).json(await getClassicLeaderboard(user.uid));
+    if(action==="classic-complete"){
+      const level=Math.trunc(Number(req.body?.level)),score=Math.trunc(Number(req.body?.score)),lives=Math.trunc(Number(req.body?.lives));
+      const current=await getGameState(user.uid),currentLevel=Math.max(1,Number(current?.level)||1),currentScore=Math.max(0,Number(current?.score)||0);
+      if(!Number.isInteger(level)||level<2||level>100||level>currentLevel+1)return res.status(400).json({error:"Invalid Classic progression"});
+      if(!Number.isInteger(score)||score<currentScore)return res.status(400).json({error:"Invalid Classic score"});
+      const leaderboard=await recordClassicResult(user.uid,level,score);
+      await saveGameState(user.uid,{level,lives,score});
+      return res.status(200).json(leaderboard);
+    }
     const day=today();
     if(action==="client-event"){
       const event=String(req.body?.event||"");

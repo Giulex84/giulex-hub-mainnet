@@ -454,6 +454,12 @@
             <div id="premiumActive" class="daily-result hidden">
               ★ Premium active
             </div>
+            <div class="leaderboard">
+              <h3>CLASSIC WEEKLY TOP 10 <span id="classicOwnPosition"></span></h3>
+              <ol id="classicLeaders">
+                <li>Complete a level to enter this week’s ranking</li>
+              </ol>
+            </div>
           </section>
           <section id="daily" class="hidden">
             <div class="daily-head">
@@ -681,6 +687,7 @@
           initGame(restored);
           const requestedMode = new URLSearchParams(location.search).get("mode");
           if (storeReady) {
+            loadClassicLeaderboard();
             if (requestedMode === "daily") showTab("daily");
             else loadDaily(true);
           }
@@ -756,7 +763,7 @@
             combo === 3 ? "🔥 TRIPLE COMBO · +50 POINTS" : `COMBO X${combo}!`;
           if (cards.every((c) => c.matched)) {
             level++;
-            saveProgress();
+            submitClassicCompletion();
             setTimeout(() => initGame(false), 700);
           }
         } else {
@@ -768,6 +775,37 @@
         selected = [];
         renderClassic();
         saveProgress();
+      }
+      async function loadClassicLeaderboard() {
+        if (!storeReady) return;
+        try {
+          const data = await api("/api/game-state", { action: "classic-leaderboard" });
+          renderClassicLeaderboard(data);
+        } catch (error) {
+          console.warn("Classic leaderboard", error.message);
+        }
+      }
+      function renderClassicLeaderboard(data) {
+        $("classicOwnPosition").textContent = data?.position ? `Your rank #${data.position}` : "";
+        $("classicLeaders").innerHTML = data?.leaders?.length
+          ? data.leaders.map((entry) =>
+              `<li><b>@${escapeHtml(entry.username)}</b><small>Level ${entry.level} · ${entry.score} pts</small></li>`
+            ).join("")
+          : "<li>Complete a level to enter this week’s ranking</li>";
+      }
+      async function submitClassicCompletion() {
+        if (!storeReady) return;
+        try {
+          const data = await api("/api/game-state", {
+            action: "classic-complete",
+            level,
+            score,
+            lives,
+          });
+          renderClassicLeaderboard(data);
+        } catch (error) {
+          console.warn("Classic result", error.message);
+        }
       }
       $("restart").onclick = () => {
         lives = Math.min(5 + level - 1, 10);
