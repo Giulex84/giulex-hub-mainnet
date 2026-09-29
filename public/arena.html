@@ -959,7 +959,7 @@
       }
       $("shareDaily").onclick = async () => {
         if (dailyState?.status !== "completed") return;
-        const url = `${location.origin}/arena.html?source=share&mode=daily`;
+        const url = "https://jr.pi?source=share&mode=daily";
         const text = `I completed Arena Daily in ${dailyState.moves} moves with ${dailyState.score} points. Can you beat me?`;
         try {
           if (navigator.share) await navigator.share({ title: "Arena Daily", text, url });
