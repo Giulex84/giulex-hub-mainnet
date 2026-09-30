@@ -7,12 +7,13 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Network: **Pi Mainnet**
 - PiNet URL: **https://jr.pi** (open in Pi Browser)
 - Pi SDK mode: `sandbox: false`
-- Developer Portal version submitted for review: **1.0.2**
+- Developer Portal version submitted for review: **1.0.3**
 - Authentication: Pi SDK only
 - Transactions: Pi only
 - Premium: **1 Pi U2A**, verified server-side and persisted by verified Pi UID
 - Daily Replay Ticket: **0.5 Pi U2A** consumable, verified and fulfilled server-side
 - Replay payments with any other amount are rejected by the Mainnet backend.
+- Classic Arena: persistent progression with a verified weekly Top 10 leaderboard, personal rank, level and score. Results are validated and recorded server-side by verified Pi UID.
 - Daily Arena: server-controlled, persistent per UTC day, with best result and Top 10 leaderboard
 - Daily Arena now creates an attempt only after an explicit Start; opening the tab only restores an existing attempt. The interface shows 6-pair progress and preserves same-day resume.
 - Async PvP: shared server-controlled deck, real Pioneer matchmaking and disclosed Arena Bot fallback
@@ -20,7 +21,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Mainnet A2U gameplay rewards: **disabled intentionally** until explicitly authorized for the production app
 - Public review documents: `privacy.html`, `terms.html`, and `validation-key.txt` on the verified production domain (`https://jr.pi` in Pi Browser)
 
-The Mainnet update is currently in review under Developer Portal version **1.0.2**. The portal submitted the update directly and did not permit changing this field; do not cancel or recreate the request solely to alter the version label.
+The Mainnet update is currently in review under Developer Portal version **1.0.3**. The portal submitted the update directly and did not permit changing this field; do not cancel or recreate the request solely to alter the version label.
 
 On **September 30, 2026**, a Developer Portal listing update was submitted for review with the refreshed Arena crossed-swords logo and current Classic, Daily and PvP screenshots. This listing-only refresh does not change Arena's data processing, payments or gameplay terms, so the Privacy Policy and Terms of Service remain accurate without a date-only revision.
 
@@ -41,7 +42,8 @@ On **September 30, 2026**, a Developer Portal listing update was submitted for r
 - First-party backend telemetry counts pseudonymous daily users and aggregate product events without cookies or advertising trackers. Reports require the private `ARENA_METRICS_KEY` header.
 - Privacy Policy and Terms were updated to match actual data/payment behavior.
 
-## Mainnet review checklist — submitted version 1.0.2
+
+## Mainnet review checklist — submitted version 1.0.3
 
 - Production URL opens inside Pi Browser without leaving a blank or legacy page.
 - Pi sign-in requests only `username` and `payments` and the backend verifies `/v2/me`.
