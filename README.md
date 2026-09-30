@@ -5,6 +5,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 ## Review / release status
 
 - Network: **Pi Mainnet**
+- PiNet URL: **https://jr.pi** (open in Pi Browser)
 - Pi SDK mode: `sandbox: false`
 - Developer Portal version submitted for review: **1.0.2**
 - Authentication: Pi SDK only
@@ -17,9 +18,11 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Async PvP: shared server-controlled deck, real Pioneer matchmaking and disclosed Arena Bot fallback
 - Gameplay progress: persisted server-side and restored by verified Pi UID
 - Mainnet A2U gameplay rewards: **disabled intentionally** until explicitly authorized for the production app
-- Public review documents: `privacy.html`, `terms.html`, and `validation-key.txt` on the verified production domain
+- Public review documents: `privacy.html`, `terms.html`, and `validation-key.txt` on the verified production domain (`https://jr.pi` in Pi Browser)
 
 The Mainnet update is currently in review under Developer Portal version **1.0.2**. The portal submitted the update directly and did not permit changing this field; do not cancel or recreate the request solely to alter the version label.
+
+On **September 30, 2026**, a Developer Portal listing update was submitted for review with the refreshed Arena crossed-swords logo and current Classic, Daily and PvP screenshots. This listing-only refresh does not change Arena's data processing, payments or gameplay terms, so the Privacy Policy and Terms of Service remain accurate without a date-only revision.
 
 ## Important changes
 
