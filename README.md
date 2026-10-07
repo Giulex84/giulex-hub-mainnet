@@ -95,3 +95,9 @@ The prior implementation accepted a UID and amount from the browser and created 
 - Advanced Payments
 
 No code change can guarantee Pi Core Team approval; review and wallet authorization remain Pi Network decisions.
+
+## Daily recovery and next actions
+
+Daily start and card-flip errors reload server state without replaying the move. If reload fails, card input stays blocked until the Restore Saved Daily action succeeds. Daily status reconciles completion ranking, idempotent streak and deduplicated completion/failure telemetry. Finished Daily challenges offer free Classic play; active challenges keep the Continue action. Rewards, move limits and payment flows are unchanged.
+
+Admin labels distinguish unfinished Daily user-days from actual abandonment, expose move-limit failure events separately, and identify staking counters as tagged-link source telemetry rather than listing staking balances. Run `node check-daily-recovery.cjs` for mocked API/UI recovery checks; these do not replace a real Pi Browser connection-loss test.

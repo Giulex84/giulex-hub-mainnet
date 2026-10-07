@@ -285,7 +285,8 @@
             <div class="metric">PRIMO TOCCO DAILY<b id="dailyFirstFlips">0</b></div>
             <div class="metric">DAILY COMPLETATE<b id="dailyCompleters">0</b></div>
             <div class="metric">COMPLETAMENTO DAILY<b id="dailyRate">0%</b></div>
-            <div class="metric">ABBANDONI DAILY<b id="dailyDropoff">0</b></div>
+            <div class="metric">DAILY NON COMPLETATE<b id="dailyDropoff">0</b><small>Avviate meno completate: include partite ancora attive e limite mosse raggiunto, non solo abbandoni.</small></div>
+            <div class="metric">LIMITE MOSSE DAILY<b id="dailyFailures">0</b><small>Eventi di partita terminata al limite mosse; include eventuali replay.</small></div>
             <div class="metric">TEMPO MEDIO DAILY<b id="dailyTime">—</b></div>
             <div class="metric">PVP AVVIATI<b id="pvpStarters">0</b></div>
             <div class="metric">PVP COMPLETATI<b id="pvpCompleters">0</b></div>
@@ -294,7 +295,7 @@
             <div class="metric">RITORNO D3<b id="d3">—</b></div>
             <div class="metric">RITORNO D7<b id="d7">—</b></div>
             <div class="metric">FIRESIDE<b id="fireside">0</b></div>
-            <div class="metric">STAKING<b id="staking">0</b></div>
+            <div class="metric">ACCESSI DA LINK STAKING<b id="staking">0</b></div>
             <div class="metric">LINK CONDIVISI<b id="share">0</b></div>
             <div class="metric">CONDIVISIONI DAILY<b id="dailyShares">0</b></div>
             <div class="metric">TIMEOUT DAILY<b id="dailyTimeouts">0</b></div>
@@ -328,7 +329,7 @@
           <div id="reportStatus" class="status">Caricamento…</div>
         </div>
         <div class="note">
-          Solo conteggi aggregati. I token di accesso Pi vengono usati per la
+          Solo conteggi aggregati. Gli accessi da link staking misurano la provenienza registrata, non i Pi in staking nel listing. Le Daily non completate non identificano la causa dell’interruzione. I token di accesso Pi vengono usati per la
           verifica e non sono visualizzati.
         </div>
       </section>
@@ -361,6 +362,7 @@
             dailyViews: 0,
             dailyFirstFlips: 0,
             dailyCompleters: 0,
+            dailyFailures: 0,
             pvpStarters: 0,
             pvpCompleters: 0,
             fireside: 0,
@@ -390,6 +392,7 @@
               totals.dailyViews += n(e, "daily_viewed");
               totals.dailyFirstFlips += n(e, "daily_first_flip");
               totals.dailyCompleters += dailyCompleters;
+              totals.dailyFailures += n(e, "daily_failed");
               totals.pvpStarters += pvpStarters;
               totals.pvpCompleters += pvpCompleters;
               totals.fireside += n(e, "source_fireside");

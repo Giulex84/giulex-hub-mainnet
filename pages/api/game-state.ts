@@ -73,7 +73,13 @@ export default async function handler(req,res){
     if(action==="daily-share"){await safeRecordMetric(user.uid,"daily_shared",`${day}:${user.uid}`);return res.status(200).json({ok:true});}
     if(action==="daily-status"){
       let daily=await getDailyChallenge(user.uid,day);
-      const meta=await getDailyMeta(user.uid,day);if(daily?.status==="completed"&&!meta.best)meta.best=await recordDailyResult(user.uid,day,daily);
+      if(daily?.status==="completed"){
+        await recordDailyResult(user.uid,day,daily);
+        await recordDailyCompletion(user.uid,day);
+        await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day,Math.max(1,Math.round((Date.parse(daily.completedAt)-Date.parse(daily.startedAt))/1000)));
+      }
+      if(daily?.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day);
+      const meta=await getDailyMeta(user.uid,day);
       return res.status(200).json({daily:daily?publicDaily(daily):null,meta});
     }
     if(action==="daily-start"){
