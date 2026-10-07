@@ -594,14 +594,20 @@
         if (auth && arenaSession) headers["X-Arena-Session"] = arenaSession;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 12000);
-        let r;
         try {
-          r = await fetch(path, {
+          const r = await fetch(path, {
             method: "POST",
             headers,
             body: JSON.stringify(body || {}),
             signal: controller.signal,
           });
+          const d = await r.json().catch(error => { if(error?.name === "AbortError")throw error; return {}; });
+          if (!r.ok) {
+            const e = new Error(d.error || `Request failed (${r.status})`);
+            e.status = r.status;
+            throw e;
+          }
+          return d;
         } catch (error) {
           if (error?.name === "AbortError") {
             const timeoutError = new Error("Connection timed out · recovering state");
@@ -612,13 +618,6 @@
         } finally {
           clearTimeout(timeout);
         }
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          const e = new Error(d.error || `Request failed (${r.status})`);
-          e.status = r.status;
-          throw e;
-        }
-        return d;
       }
       function setStatus(t) {
         $("status").textContent = t;
@@ -866,7 +865,7 @@
             dailyViewRecorded = true;
             recordClientEvent("daily_viewed");
           }
-          if (!dailyLoaded) loadDaily();
+          if (!dailyLoaded || (dailyState?.day && dailyState.day !== new Date().toISOString().slice(0,10))) loadDaily();
         }
         if (name === "pvp" && storeReady) loadPvp();
       }
@@ -879,6 +878,7 @@
         try { await api("/api/game-state", { action: "client-event", event }); } catch {}
       }
       async function loadDaily(silent = false) {
+        if (dailyBusy && !dailyNeedsSync) return;
         const requestId = ++dailyLoadId;
         dailyLoading = true;
         renderDaily();
@@ -887,6 +887,7 @@
           if (requestId !== dailyLoadId) return;
           dailyState = d.daily;
           dailyMeta = d.meta || dailyMeta;
+          if (Number.isFinite(d.replayCredits)) replayCredits = d.replayCredits;
           dailyLoaded = true;
           dailyNeedsSync = false;
           dailyVisible = {};
@@ -1018,12 +1019,17 @@
       $("dailyToPvp").onclick = () => showTab("pvp");
       async function dailyFlip(index) {
         if (dailyBusy || dailyLoading || dailyNeedsSync) return;
+        if (dailyState?.day !== new Date().toISOString().slice(0,10)) { await loadDaily(); return; }
         dailyBusy = true;
         dailyPendingIndex = index;
         renderDaily();
         try {
           const d = await api("/api/game-state", {
             action: "daily-flip",
+            day: dailyState.day,
+            expectedMoves: dailyState.moves,
+            expectedFirstIndex: dailyState.firstIndex,
+            expectedAttemptId: dailyState.attemptId,
             index,
           });
           dailyPendingIndex = null;
@@ -1131,17 +1137,19 @@
         );
       };
       $("useReplay").onclick = async () => {
-        if (dailyBusy || replayCredits < 1) return;
+        if (dailyBusy || dailyLoading || dailyNeedsSync || replayCredits < 1) return;
+        if (dailyState?.day !== new Date().toISOString().slice(0,10)) { await loadDaily(); return; }
+        ++dailyLoadId;
         dailyBusy = true;
         try {
-          const d = await api("/api/game-state", { action: "daily-reset" });
+          const d = await api("/api/game-state", { action: "daily-reset", day: dailyState.day, expectedAttemptId: dailyState.attemptId });
           dailyState = d.daily;
           dailyMeta = d.meta || dailyMeta;
           replayCredits = Number(d.replayCredits) || 0;
           dailyVisible = {};
           setStatus("New Daily Arena generated");
         } catch (e) {
-          setStatus(e.message);
+          await restoreDailyAfterError(e);
         } finally {
           dailyBusy = false;
           renderDaily();

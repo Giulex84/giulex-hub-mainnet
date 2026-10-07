@@ -26,7 +26,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     if (action === "recover") {
       let payment = await getPayment(paymentId);
-      const invalid = validateStorePayment(payment);
+      const paymentUid=payment.user_uid;
+      let invalid = validateStorePayment(payment);
       if (invalid) return res.status(400).json({ error: invalid });
       await claimPayment(payment.user_uid, paymentId);
       if (!payment.status?.developer_completed) {
@@ -37,6 +38,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!result.response.ok) return res.status(result.response.status).json(result.data);
       }
       payment = await getPayment(paymentId);
+      invalid=validateStorePayment(payment,paymentUid);
+      if(invalid)return res.status(400).json({error:invalid});
       if (!payment.status?.developer_completed || !payment.status?.transaction_verified) return res.status(409).json({ error: "Payment is not fully verified" });
       return res.status(200).json({ success: true, recovered: true, ...await fulfill(payment) });
     }

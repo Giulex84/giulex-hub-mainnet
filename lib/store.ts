@@ -58,16 +58,31 @@ async function saveGameState(uid,state){
   const value=JSON.stringify({level,lives,score,updatedAt:new Date().toISOString()});await command(["SET",gameStateKey(uid),value]);return{level,lives,score};
 }
 
-async function getDailyChallenge(uid,day){const raw=await command(["GET",dailyKey(uid,day)]);if(!raw)return null;try{return JSON.parse(raw);}catch{return null;}}
+// Redis cjson encodes an empty Lua array as {}. Restore only that known
+// representation; reject other malformed values instead of discarding progress.
+function matchedIndices(value){
+  if(Array.isArray(value))return value;
+  if(value&&typeof value==="object"&&Object.keys(value).length===0)return [];
+  const error=new Error("Stored matched cards require review");error.statusCode=503;throw error;
+}
+function normalizeDaily(state){state.matched=matchedIndices(state.matched);return state;}
+function normalizePvp(match){for(const player of match.players)player.matched=matchedIndices(player.matched);return match;}
+async function getDailyChallenge(uid,day){const raw=await command(["GET",dailyKey(uid,day)]);if(raw===null||raw===undefined)return null;try{const state=JSON.parse(raw);if(!state||typeof state!=="object"||!Array.isArray(state.deck))throw new Error("Invalid Daily state");return normalizeDaily(state);}catch{const error=new Error("Stored Daily data requires review");error.statusCode=503;throw error;}}
 async function saveDailyChallenge(uid,day,state){await command(["SET",dailyKey(uid,day),JSON.stringify(state),"EX",259200]);return state;}
 async function acquireDailyLock(uid,day){const id=`${Date.now()}:${Math.random().toString(36).slice(2)}`;const ok=await command(["SET",dailyLockKey(uid,day),id,"NX","EX",10]);if(ok!=="OK")throw new Error("Daily challenge request already in progress");return id;}
 async function releaseDailyLock(uid,day,id){const script='if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end';await command(["EVAL",script,1,dailyLockKey(uid,day),id]);}
-async function flipDailyCard(uid,day,index,maxMoves){
+async function flipDailyCard(uid,day,index,maxMoves,expected=null){
   const script=`
 local raw=redis.call("GET",KEYS[1])
 if not raw then return cjson.encode({error="Start today's challenge first",code=409}) end
 local daily=cjson.decode(raw)
 if daily.status~="active" then return cjson.encode({daily=daily}) end
+if ARGV[4]~="" then
+  local expectedFirst=ARGV[5]
+  local currentFirst=daily.firstIndex==cjson.null and "null" or tostring(daily.firstIndex)
+  if tonumber(daily.moves)~=tonumber(ARGV[4]) or currentFirst~=expectedFirst then return cjson.encode({error="Daily state changed. Reload saved progress.",code=409}) end
+end
+if ARGV[6]~="" and (daily.attemptId or daily.startedAt)~=ARGV[6] then return cjson.encode({error="Daily attempt changed. Reload saved progress.",code=409}) end
 local idx=tonumber(ARGV[1])
 if not idx or idx<0 or idx>=#daily.deck then return cjson.encode({error="Invalid card",code=400}) end
 for _,matchedIndex in ipairs(daily.matched) do if tonumber(matchedIndex)==idx then return cjson.encode({error="Card is already visible",code=409}) end end
@@ -99,13 +114,62 @@ else
 end
 redis.call("SET",KEYS[1],cjson.encode(daily),"EX",259200)
 return cjson.encode({daily=daily,reveal=reveal})`;
-  const raw=await command(["EVAL",script,1,dailyKey(uid,day),index,maxMoves,new Date().toISOString()]);
+  const raw=await command(["EVAL",script,1,dailyKey(uid,day),index,maxMoves,new Date().toISOString(),expected?String(expected.moves):"",expected?String(expected.firstIndex):"",expected?.attemptId||""]);
   const result=JSON.parse(raw);
   if(result?.error){const error=new Error(result.error);error.statusCode=Number(result.code)||409;throw error;}
+  result.daily=normalizeDaily(result.daily);
   return result;
 }
 async function getReplayCredits(uid){return Math.max(0,Number((await command(["GET",replayCreditsKey(uid)]))||0));}
-async function grantReplayCredit(uid,paymentId){await claimPayment(uid,paymentId);const created=await command(["SET",replayFulfilledKey(paymentId),uid,"NX"]);if(created==="OK")await command(["INCR",replayCreditsKey(uid)]);else{const owner=await command(["GET",replayFulfilledKey(paymentId)]);if(owner!==uid)throw new Error("Replay fulfillment belongs to another user");}return getReplayCredits(uid);}
+async function grantReplayCredit(uid,paymentId){
+  const script=`
+local owner=redis.call("GET",KEYS[1])
+if owner and owner~=ARGV[1] then return redis.error_reply("Payment already belongs to another user") end
+local fulfilled=redis.call("GET",KEYS[2])
+if fulfilled and fulfilled~=ARGV[1] then return redis.error_reply("Replay fulfillment belongs to another user") end
+local balance=redis.call("GET",KEYS[3])
+if balance and (not tonumber(balance) or tonumber(balance)<0 or tonumber(balance)>=9007199254740991 or tonumber(balance)%1~=0) then return redis.error_reply("Replay balance requires review") end
+redis.call("SET",KEYS[1],ARGV[1])
+if not fulfilled then
+  redis.call("SET",KEYS[2],ARGV[1])
+  redis.call("INCR",KEYS[3])
+end
+return tonumber(redis.call("GET",KEYS[3]) or "0")`;
+  return Number(await command(["EVAL",script,3,paymentKey(paymentId),replayFulfilledKey(paymentId),replayCreditsKey(uid),uid]));
+}
+async function startDailyChallenge(uid,day,state,lockId){
+  const script=`
+if redis.call("GET",KEYS[3])~=ARGV[2] then return redis.error_reply("Daily lock expired. Reload saved progress.") end
+local current=redis.call("GET",KEYS[1])
+if current then return current end
+local attempts=redis.call("GET",KEYS[2])
+if attempts and (not tonumber(attempts) or tonumber(attempts)<0 or tonumber(attempts)>=9007199254740991 or tonumber(attempts)%1~=0) then return redis.error_reply("Daily attempts require review") end
+redis.call("SET",KEYS[1],ARGV[1],"EX",259200)
+redis.call("INCR",KEYS[2])
+redis.call("EXPIRE",KEYS[2],259200)
+return ARGV[1]`;
+  return JSON.parse(await command(["EVAL",script,3,dailyKey(uid,day),dailyAttemptsKey(uid,day),dailyLockKey(uid,day),JSON.stringify(state),lockId]));
+}
+async function resetDailyChallenge(uid,day,state,lockId,expectedAttemptId=""){
+  const script=`
+if redis.call("GET",KEYS[4])~=ARGV[2] then return redis.error_reply("Daily lock expired. Reload saved progress.") end
+if ARGV[3]~="" then
+  local raw=redis.call("GET",KEYS[2])
+  if not raw then return redis.error_reply("Daily attempt changed. Reload saved progress.") end
+  local old=cjson.decode(raw)
+  if (old.attemptId or old.startedAt)~=ARGV[3] then return redis.error_reply("Daily attempt changed. Reload saved progress.") end
+end
+local credits=tonumber(redis.call("GET",KEYS[1]) or "0")
+if not credits or credits<1 then return redis.error_reply("A Daily Replay Ticket is required") end
+local attempts=redis.call("GET",KEYS[3])
+if attempts and (not tonumber(attempts) or tonumber(attempts)<0 or tonumber(attempts)>=9007199254740991 or tonumber(attempts)%1~=0) then return redis.error_reply("Daily attempts require review") end
+redis.call("DECR",KEYS[1])
+redis.call("SET",KEYS[2],ARGV[1],"EX",259200)
+redis.call("INCR",KEYS[3])
+redis.call("EXPIRE",KEYS[3],259200)
+return credits-1`;
+  return Number(await command(["EVAL",script,4,replayCreditsKey(uid),dailyKey(uid,day),dailyAttemptsKey(uid,day),dailyLockKey(uid,day),JSON.stringify(state),lockId,expectedAttemptId]));
+}
 async function consumeReplayCredit(uid){const count=await getReplayCredits(uid);if(count<1)throw new Error("A Daily Replay Ticket is required");await command(["DECR",replayCreditsKey(uid)]);return count-1;}
 async function saveProfile(uid,username){const value=JSON.stringify({uid,username:typeof username==="string"?username.slice(0,64):null});await command(["SET",profileKey(uid),value]);}
 function classicWeekStart(){const date=new Date(),offset=(date.getUTCDay()+6)%7;date.setUTCDate(date.getUTCDate()-offset);return date.toISOString().slice(0,10);}
@@ -137,12 +201,28 @@ async function recordClassicResult(uid,levelReached,scoreValue){
 async function recordDailyAttempt(uid,day){const count=Number(await command(["INCR",dailyAttemptsKey(uid,day)]));if(count===1)await command(["EXPIRE",dailyAttemptsKey(uid,day),259200]);return count;}
 async function getDailyBest(uid,day){const raw=await command(["GET",dailyBestKey(uid,day)]);if(!raw)return null;try{return JSON.parse(raw);}catch{return null;}}
 function isBetterDailyResult(next,current){return!current||next.moves<current.moves||(next.moves===current.moves&&next.score>current.score);}
-async function recordDailyResult(uid,day,result){const next={moves:Math.max(0,Math.trunc(Number(result.moves)||0)),score:Math.max(0,Math.trunc(Number(result.score)||0)),completedAt:new Date().toISOString()};const current=await getDailyBest(uid,day),best=isBetterDailyResult(next,current)?next:current;if(best===next)await command(["SET",dailyBestKey(uid,day),JSON.stringify(best),"EX",259200]);const rank=best.moves*1000000-best.score;await command(["ZADD",dailyLeaderboardKey(day),rank,uid]);await command(["EXPIRE",dailyLeaderboardKey(day),259200]);return best;}
+async function recordDailyResult(uid,day,result){
+  const next={moves:Math.max(0,Math.trunc(Number(result.moves)||0)),score:Math.max(0,Math.trunc(Number(result.score)||0)),completedAt:result.completedAt||new Date().toISOString()};
+  const script=`
+local raw=redis.call("GET",KEYS[1])
+local next=cjson.decode(ARGV[1])
+local best=next
+if raw then
+  local current=cjson.decode(raw)
+  if current.moves<next.moves or (current.moves==next.moves and current.score>=next.score) then best=current end
+end
+local value=cjson.encode(best)
+redis.call("SET",KEYS[1],value,"EX",259200)
+redis.call("ZADD",KEYS[2],best.moves*1000000-best.score,ARGV[2])
+redis.call("EXPIRE",KEYS[2],259200)
+return value`;
+  return JSON.parse(await command(["EVAL",script,2,dailyBestKey(uid,day),dailyLeaderboardKey(day),JSON.stringify(next),uid]));
+}
 async function getDailyStreak(uid){const raw=await command(["GET",dailyStreakKey(uid)]);if(!raw)return{count:0,lastDay:null};try{const value=JSON.parse(raw);return{count:Math.max(0,Number(value?.count)||0),lastDay:typeof value?.lastDay==="string"?value.lastDay:null};}catch{return{count:0,lastDay:null};}}
-async function recordDailyCompletion(uid,day){const previousDay=new Date(`${day}T00:00:00.000Z`);previousDay.setUTCDate(previousDay.getUTCDate()-1);const yesterday=previousDay.toISOString().slice(0,10);const script='local raw=redis.call("GET",KEYS[1]); local count=0; local last=nil; if raw then local ok,obj=pcall(cjson.decode,raw); if ok then count=tonumber(obj["count"]) or 0; last=obj["lastDay"] end end; if last==ARGV[1] then return cjson.encode({count=count,lastDay=last}) end; if last==ARGV[2] then count=count+1 else count=1 end; local next=cjson.encode({count=count,lastDay=ARGV[1]}); redis.call("SET",KEYS[1],next,"EX",ARGV[3]); return next';const raw=await command(["EVAL",script,1,dailyStreakKey(uid),day,yesterday,34560000]);try{return JSON.parse(raw);}catch{return{count:1,lastDay:day};}}
+async function recordDailyCompletion(uid,day){const previousDay=new Date(`${day}T00:00:00.000Z`);previousDay.setUTCDate(previousDay.getUTCDate()-1);const yesterday=previousDay.toISOString().slice(0,10);const script='local raw=redis.call("GET",KEYS[1]); local count=0; local last=nil; if raw then local ok,obj=pcall(cjson.decode,raw); if ok then count=tonumber(obj["count"]) or 0; last=obj["lastDay"] end end; if last and last>=ARGV[1] then return cjson.encode({count=count,lastDay=last}) end; if last==ARGV[2] then count=count+1 else count=1 end; local next=cjson.encode({count=count,lastDay=ARGV[1]}); redis.call("SET",KEYS[1],next,"EX",ARGV[3]); return next';const raw=await command(["EVAL",script,1,dailyStreakKey(uid),day,yesterday,34560000]);try{return JSON.parse(raw);}catch{return{count:1,lastDay:day};}}
 async function getDailyMeta(uid,day){const[attempts,best,streak]=await Promise.all([command(["GET",dailyAttemptsKey(uid,day)]),getDailyBest(uid,day),getDailyStreak(uid)]);return{attempts:Math.max(0,Number(attempts)||0),best,streak};}
 async function getDailyLeaderboard(uid,day){const ids=await command(["ZRANGE",dailyLeaderboardKey(day),0,9]),list=Array.isArray(ids)?ids:[];if(!list.length)return{leaders:[],position:null};const keys=[];for(const id of list)keys.push(profileKey(id),dailyBestKey(id,day));const values=await command(["MGET",...keys]);const leaders=list.map((id,index)=>{let profile=null,best=null;try{profile=values?.[index*2]?JSON.parse(values[index*2]):null;}catch{}try{best=values?.[index*2+1]?JSON.parse(values[index*2+1]):null;}catch{}return{rank:index+1,username:profile?.username||"Pioneer",moves:best?.moves||0,score:best?.score||0};});const ownRank=await command(["ZRANK",dailyLeaderboardKey(day),uid]);return{leaders,position:ownRank===null?null:Number(ownRank)+1};}
-async function getPvpMatch(id){if(!id)return null;const raw=await command(["GET",pvpMatchKey(id)]);if(!raw)return null;try{return JSON.parse(raw);}catch{return null;}}
+async function getPvpMatch(id){if(!id)return null;const raw=await command(["GET",pvpMatchKey(id)]);if(!raw)return null;try{return normalizePvp(JSON.parse(raw));}catch{const error=new Error("Stored PvP data requires review");error.statusCode=503;throw error;}}
 async function savePvpMatch(match){await command(["SET",pvpMatchKey(match.id),JSON.stringify(match),"EX",172800]);return match;}
 async function getUserPvpMatch(uid){const id=await command(["GET",pvpUserKey(uid)]);return id?getPvpMatch(id):null;}
 async function setUserPvpMatch(uid,id){await command(["SET",pvpUserKey(uid),id,"EX",172800]);}
@@ -198,6 +278,7 @@ return cjson.encode({match=match,reveal=reveal})`;
   const raw=await command(["EVAL",script,1,pvpUserKey(uid),"arena:pvp:match:",uid,index,maxMoves]);
   const result=JSON.parse(raw);
   if(result?.error){const error=new Error(result.error);error.statusCode=Number(result.code)||409;throw error;}
+  result.match=normalizePvp(result.match);
   return result;
 }
 
@@ -230,6 +311,6 @@ async function getMetricsReport(days){
   for(let offset=0;offset<count;offset++){const date=dateAt(offset);labels.push(date);keys.push(metricsUniqueKey(date),metricsEventsKey(date),metricsNewUsersKey(date),metricsReturningUsersKey(date),metricsEventUsersKey(date,"daily_started"),metricsEventUsersKey(date,"daily_completed"),metricsEventUsersKey(date,"pvp_started"),metricsEventUsersKey(date,"pvp_completed"),metricsTimingsKey(date),metricsEventUsersKey(dateAt(offset-1),"login"),metricsEventUsersKey(dateAt(offset-3),"login"),metricsEventUsersKey(dateAt(offset-7),"login"));}
   const script=`local out={}; for i=1,#KEYS,12 do local unique=redis.call("PFCOUNT",KEYS[i]); local events=redis.call("HGETALL",KEYS[i+1]); local timings=redis.call("HGETALL",KEYS[i+8]); table.insert(out,{unique=unique,events=events,newUsers=redis.call("SCARD",KEYS[i+2]),returningUsers=redis.call("SCARD",KEYS[i+3]),dailyStarters=redis.call("SCARD",KEYS[i+4]),dailyCompleters=redis.call("SCARD",KEYS[i+5]),pvpStarters=redis.call("SCARD",KEYS[i+6]),pvpCompleters=redis.call("SCARD",KEYS[i+7]),timings=timings,d1=#redis.call("SINTER",KEYS[i+2],KEYS[i+9]),d3=#redis.call("SINTER",KEYS[i+2],KEYS[i+10]),d7=#redis.call("SINTER",KEYS[i+2],KEYS[i+11])}) end; return cjson.encode(out)`;
   const rows=JSON.parse(await command(["EVAL",script,keys.length,...keys]));
-  return labels.map((day,index)=>{const row=rows[index]||{},pairs=row.events||[],timingPairs=row.timings||[],events={},timings={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;for(let i=0;i<timingPairs.length;i+=2)timings[timingPairs[i]]=Number(timingPairs[i+1])||0;const durationCount=timings["daily_completed:count"]||0;return{day,uniqueUsers:Number(row.unique)||0,newUsers:Number(row.newUsers)||0,returningUsers:Number(row.returningUsers)||0,dailyStarters:Number(row.dailyStarters)||0,dailyCompleters:Number(row.dailyCompleters)||0,pvpStarters:Number(row.pvpStarters)||0,pvpCompleters:Number(row.pvpCompleters)||0,averageDailySeconds:durationCount?Math.round((timings["daily_completed:sum"]||0)/durationCount):0,d1:Number(row.d1)||0,d3:Number(row.d3)||0,d7:Number(row.d7)||0,events};});
+  return labels.map((day,index)=>{const row=rows[index]||{},pairs=row.events||[],timingPairs=row.timings||[],events={},timings={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;for(let i=0;i<timingPairs.length;i+=2)timings[timingPairs[i]]=Number(timingPairs[i+1])||0;const durationCount=timings["daily_completed:count"]||0;return{day,uniqueUsers:Number(row.unique)||0,newUsers:Number(row.newUsers)||0,returningUsers:Number(row.returningUsers)||0,dailyStarters:Number(row.dailyStarters)||0,dailyCompleters:Number(row.dailyCompleters)||0,pvpStarters:Number(row.pvpStarters)||0,pvpCompleters:Number(row.pvpCompleters)||0,dailyDurationCount:durationCount,dailyDurationSum:timings["daily_completed:sum"]||0,averageDailySeconds:durationCount?Math.round((timings["daily_completed:sum"]||0)/durationCount):0,d1:Number(row.d1)||0,d3:Number(row.d3)||0,d7:Number(row.d7)||0,events};});
 }
-export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getClassicLeaderboard,recordClassicResult,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,recordDailyCompletion,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};
+export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getClassicLeaderboard,recordClassicResult,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,startDailyChallenge,resetDailyChallenge,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,recordDailyCompletion,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};

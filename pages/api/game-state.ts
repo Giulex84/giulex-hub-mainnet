@@ -1,14 +1,14 @@
 // @ts-nocheck
 const crypto = require("crypto");
 const { bearerFromRequest, arenaSessionFromRequest, verifyArenaSession, verifyAccessToken } = require("../../lib/pi");
-const { getGameState, saveGameState, getClassicLeaderboard, recordClassicResult, getDailyChallenge, saveDailyChallenge, acquireDailyLock, releaseDailyLock, flipDailyCard, getReplayCredits, consumeReplayCredit, recordDailyAttempt, recordDailyResult, recordDailyCompletion, getDailyMeta, getDailyLeaderboard, getPvpMatch, savePvpMatch, getUserPvpMatch, setUserPvpMatch, clearUserPvpMatch, getPvpQueue, setPvpQueue, clearPvpQueue, acquirePvpLock, releasePvpLock, acquirePvpMatchLock, releasePvpMatchLock, flipPvpCard, isStoreConfigured } = require("../../lib/store");
+const { getGameState, saveGameState, getClassicLeaderboard, recordClassicResult, getDailyChallenge, acquireDailyLock, releaseDailyLock, flipDailyCard, getReplayCredits, startDailyChallenge, resetDailyChallenge, recordDailyResult, recordDailyCompletion, getDailyMeta, getDailyLeaderboard, getPvpMatch, savePvpMatch, getUserPvpMatch, setUserPvpMatch, clearUserPvpMatch, getPvpQueue, setPvpQueue, clearPvpQueue, acquirePvpLock, releasePvpLock, acquirePvpMatchLock, releasePvpMatchLock, flipPvpCard, isStoreConfigured } = require("../../lib/store");
 const { safeRecordMetric } = require("../../lib/metrics");
 
 const DAILY_SYMBOLS=["⚔","🔥","🛡","🏹","👑","💎"];
 const MAX_MOVES=18;
 const today=()=>new Date().toISOString().slice(0,10);
 function shuffle(values){const a=[...values];for(let i=a.length-1;i>0;i--){const j=crypto.randomInt(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
-function publicDaily(s){const matchedValues={};for(const i of s.matched)matchedValues[i]=s.deck[i];return{day:s.day,status:s.status,moves:s.moves,maxMoves:MAX_MOVES,matches:s.matched.length/2,matched:s.matched,matchedValues,firstIndex:s.firstIndex,firstValue:s.firstIndex===null?null:s.deck[s.firstIndex],score:s.score};}
+function publicDaily(s){const matchedValues={};for(const i of s.matched)matchedValues[i]=s.deck[i];return{day:s.day,attemptId:s.attemptId||s.startedAt,status:s.status,moves:s.moves,maxMoves:MAX_MOVES,matches:s.matched.length/2,matched:s.matched,matchedValues,firstIndex:s.firstIndex,firstValue:s.firstIndex===null?null:s.deck[s.firstIndex],score:s.score};}
 function newPvpPlayer(uid,username,bot=false){return{uid,username:username||"Pioneer",bot,matched:[],firstIndex:null,moves:0,score:0,status:bot?"completed":"active"};}
 function comparePvp(a,b){if(a.status==="completed"&&b.status!=="completed")return 1;if(b.status==="completed"&&a.status!=="completed")return-1;if(a.moves!==b.moves)return a.moves<b.moves?1:-1;if(a.score!==b.score)return a.score>b.score?1:-1;return 0;}
 function publicPvp(match,uid){if(!match)return null;const own=match.players.find(p=>p.uid===uid),opponent=match.players.find(p=>p.uid!==uid);if(!own)return null;const matchedValues={};for(const i of own.matched)matchedValues[i]=match.deck[i];const bothDone=opponent&&own.status!=="active"&&opponent.status!=="active",comparison=bothDone?comparePvp(own,opponent):null;return{id:match.id,status:match.status,maxMoves:MAX_MOVES,own:{status:own.status,moves:own.moves,score:own.score,matched:own.matched,matchedValues,firstIndex:own.firstIndex,firstValue:own.firstIndex===null?null:match.deck[own.firstIndex],rematchRequested:Boolean(own.rematchRequested)},opponent:opponent?{username:opponent.username,bot:Boolean(opponent.bot),status:opponent.status,moves:opponent.moves,score:opponent.score,rematchRequested:Boolean(opponent.rematchRequested)}:null,result:comparison===null?null:comparison>0?"win":comparison<0?"loss":"draw"};}
@@ -76,28 +76,36 @@ export default async function handler(req,res){
       if(daily?.status==="completed"){
         await recordDailyResult(user.uid,day,daily);
         await recordDailyCompletion(user.uid,day);
-        await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day,Math.max(1,Math.round((Date.parse(daily.completedAt)-Date.parse(daily.startedAt))/1000)));
+        await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day,Math.max(1,Math.round((Date.parse(daily.completedAt)-Date.parse(daily.startedAt))/1000)),day);
       }
-      if(daily?.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day);
+      if(daily?.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day,0,day);
       const meta=await getDailyMeta(user.uid,day);
-      return res.status(200).json({daily:daily?publicDaily(daily):null,meta});
+      return res.status(200).json({daily:daily?publicDaily(daily):null,meta,replayCredits:await getReplayCredits(user.uid)});
     }
     if(action==="daily-start"){
       const lockId=await acquireDailyLock(user.uid,day);
-      try{let daily=await getDailyChallenge(user.uid,day);if(!daily){daily={day,deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString()};await saveDailyChallenge(user.uid,day,daily);await recordDailyAttempt(user.uid,day);await safeRecordMetric(user.uid,"daily_started",daily.startedAt);}return res.status(200).json({daily:publicDaily(daily),meta:await getDailyMeta(user.uid,day)});}finally{await releaseDailyLock(user.uid,day,lockId);}
+      try{let daily=await getDailyChallenge(user.uid,day);if(!daily){daily={day,attemptId:crypto.randomUUID(),deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString()};daily=await startDailyChallenge(user.uid,day,daily,lockId);await safeRecordMetric(user.uid,"daily_started",daily.startedAt,0,day);}return res.status(200).json({daily:publicDaily(daily),meta:await getDailyMeta(user.uid,day)});}finally{await releaseDailyLock(user.uid,day,lockId);}
     }
     if(action==="daily-reset"){
+      if(req.body?.day&&req.body.day!==day)return res.status(409).json({error:"Daily day changed. Reload saved progress."});
       const lockId=await acquireDailyLock(user.uid,day);
-      try{const replayCredits=await consumeReplayCredit(user.uid),daily={day,deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString(),replay:true};await saveDailyChallenge(user.uid,day,daily);await recordDailyAttempt(user.uid,day);await safeRecordMetric(user.uid,"daily_replay_started",daily.startedAt);return res.status(200).json({daily:publicDaily(daily),replayCredits,meta:await getDailyMeta(user.uid,day)});}finally{await releaseDailyLock(user.uid,day,lockId);}
+      try{const daily={day,attemptId:crypto.randomUUID(),deck:shuffle([...DAILY_SYMBOLS,...DAILY_SYMBOLS]),matched:[],firstIndex:null,moves:0,score:0,status:"active",startedAt:new Date().toISOString(),replay:true};const replayCredits=await resetDailyChallenge(user.uid,day,daily,lockId,typeof req.body?.expectedAttemptId==="string"?req.body.expectedAttemptId:"");await safeRecordMetric(user.uid,"daily_replay_started",daily.startedAt,0,day);return res.status(200).json({daily:publicDaily(daily),replayCredits,meta:await getDailyMeta(user.uid,day)});}finally{await releaseDailyLock(user.uid,day,lockId);}
     }
     if(action==="daily-flip"){
+      if(req.body?.day&&req.body.day!==day)return res.status(409).json({error:"Daily day changed. Reload saved progress."});
       const index=Number(req.body?.index);
       if(!Number.isInteger(index)||index<0||index>=DAILY_SYMBOLS.length*2)return res.status(400).json({error:"Invalid card"});
-      const result=await flipDailyCard(user.uid,day,index,MAX_MOVES),daily=result.daily;
-      if(result.reveal?.pending&&daily.moves===0&&daily.matched.length===0)await safeRecordMetric(user.uid,"daily_first_flip",day);
+      let expected=null;
+      if(req.body?.expectedMoves!==undefined){
+        const moves=req.body.expectedMoves,firstIndex=req.body.expectedFirstIndex;
+        if(!Number.isInteger(moves)||moves<0||moves>MAX_MOVES||(firstIndex!==null&&(!Number.isInteger(firstIndex)||firstIndex<0||firstIndex>=12)))return res.status(400).json({error:"Invalid Daily state expectation"});
+        expected={moves,firstIndex,attemptId:typeof req.body?.expectedAttemptId==="string"?req.body.expectedAttemptId:""};
+      }
+      const result=await flipDailyCard(user.uid,day,index,MAX_MOVES,expected),daily=result.daily;
+      if(result.reveal?.pending&&daily.moves===0&&daily.matched.length===0)await safeRecordMetric(user.uid,"daily_first_flip",day,0,day);
       let meta=null;if(daily.status==="completed"){await recordDailyResult(user.uid,day,daily);if(result.reveal&&!result.reveal.pending)await recordDailyCompletion(user.uid,day);meta=await getDailyMeta(user.uid,day);}
-      if(result.reveal&&!result.reveal.pending&&daily.status==="completed")await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day,Math.max(1,Math.round((Date.parse(daily.completedAt)-Date.parse(daily.startedAt))/1000)));
-      if(result.reveal&&!result.reveal.pending&&daily.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day);
+      if(result.reveal&&!result.reveal.pending&&daily.status==="completed")await safeRecordMetric(user.uid,"daily_completed",daily.completedAt||day,Math.max(1,Math.round((Date.parse(daily.completedAt)-Date.parse(daily.startedAt))/1000)),day);
+      if(result.reveal&&!result.reveal.pending&&daily.status==="failed")await safeRecordMetric(user.uid,"daily_failed",daily.completedAt||day,0,day);
       return res.status(200).json({daily:publicDaily(daily),meta,reveal:result.reveal});
     }
     if(action==="pvp-status"){

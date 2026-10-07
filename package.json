@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node check-daily-recovery.cjs && node tests/check-admin.cjs && node tests/check-payments.cjs && node tests/check-redis.cjs",
+    "test:redis": "node tests/check-redis.cjs"
   },
   "dependencies": {
     "next": "15.5.25",

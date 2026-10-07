@@ -98,6 +98,20 @@ No code change can guarantee Pi Core Team approval; review and wallet authorizat
 
 ## Daily recovery and next actions
 
-Daily start and card-flip errors reload server state without replaying the move. If reload fails, card input stays blocked until the Restore Saved Daily action succeeds. Daily status reconciles completion ranking, idempotent streak and deduplicated completion/failure telemetry. Finished Daily challenges offer free Classic play; active challenges keep the Continue action. Rewards, move limits and payment flows are unchanged.
+Daily start and card-flip errors reload server state without replaying the move. If reload fails, card input stays blocked until the Restore Saved Daily action succeeds. Daily status reconciles completion ranking, idempotent streak and deduplicated completion/failure telemetry. Finished Daily challenges offer free Classic play; active challenges keep the Continue action. Rewards, prices and move limits are unchanged.
 
-Admin labels distinguish unfinished Daily user-days from actual abandonment, expose move-limit failure events separately, and identify staking counters as tagged-link source telemetry rather than listing staking balances. Run `node check-daily-recovery.cjs` for mocked API/UI recovery checks; these do not replace a real Pi Browser connection-loss test.
+Admin labels distinguish unfinished Daily user-days from actual abandonment, expose move-limit failure events separately, and identify staking counters as tagged-link source telemetry rather than listing staking balances. Run `npm test` for API/UI recovery, dashboard and payment-validation checks. The Redis suite is included and prints an explicit skip when no local Redis executable is provided. To run every check, use `REDIS_TEST_SERVER=/path/to/redis-server npm test`; `npm run test:redis` runs only the isolated Redis suite. These tests never connect to Mainnet Redis or execute a Pi payment and do not replace an authenticated Pi Browser connection-loss test.
+
+
+## Mainnet reliability corrections
+
+- Daily start commits its board and attempt count atomically. Replay reset commits ticket consumption, the new board and attempt count together, and rejects an expired lock owner.
+- New clients send the UTC day, expected card state and server-issued attempt identifier. A stale move or reset cannot mutate a later attempt. Existing Daily records use their original start timestamp as a compatibility identifier; older clients remain accepted and should refresh to use the new safeguards.
+- Completion best-result comparison and ranking updates are atomic. Reconciliation preserves the completion timestamp and cannot roll a streak back when an older day finishes late.
+- Status recovery reloads replay credits as well as the board. Input and replay reset stay blocked until uncertain state is restored; timeout coverage includes reading the response body.
+- Replay payment fulfillment writes its marker and ticket in one Lua operation. Both current and legacy recovery routes revalidate the final server payment lookup before delivery.
+- Daily telemetry keeps the server-selected challenge day when a request straddles midnight. The admin period duration is weighted by completed observations, and retention excludes cohorts whose observation day is still in progress. Older dashboard responses cannot replace a newer period.
+- Empty matched-card lists encoded as `{}` by Redis Lua are restored to arrays at the Daily/PvP response boundary. Other malformed lists fail closed.
+- Malformed saved Daily records fail closed instead of being replaced with a new challenge.
+
+Automated fault injection covers lost replies after Redis commits, concurrent taps, expired locks, old-attempt requests, streak/result reconciliation and telemetry deduplication. It does not audit historical production balances. A fulfillment marker written by older code without its ticket cannot be safely repaired automatically: compare the verified payment, fulfillment marker and ticket-use history manually before any adjustment. Telemetry remains best effort and can omit events.

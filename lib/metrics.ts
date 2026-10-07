@@ -29,12 +29,12 @@ const EVENTS = new Set([
 const day = () => new Date().toISOString().slice(0, 10);
 const pseudonym = (value: string) => crypto.createHmac("sha256", getServerApiKey()).update(value).digest("hex");
 
-export async function safeRecordMetric(uid: string, event: string, dedupeId = "", value = 0) {
-  if (!uid || !EVENTS.has(event)) return false;
+export async function safeRecordMetric(uid: string, event: string, dedupeId = "", value = 0, eventDay = day()) {
+  if (!uid || !EVENTS.has(event) || !/^\d{4}-\d{2}-\d{2}$/.test(eventDay)) return false;
   try {
     const subject = pseudonym(`user:${uid}`);
     const dedupe = dedupeId ? pseudonym(`event:${uid}:${event}:${dedupeId}`) : "";
-    return await recordMetric(day(), subject, event, dedupe, value);
+    return await recordMetric(eventDay, subject, event, dedupe, value);
   } catch {
     return false;
   }
