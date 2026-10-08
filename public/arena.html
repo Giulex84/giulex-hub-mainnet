@@ -936,7 +936,7 @@
         await loadDaily();
         if (!dailyNeedsSync) {
           recordClientEvent("daily_recovered");
-          setStatus("Daily restored from saved progress. Continue when ready.");
+          setStatus(`Daily restored from saved progress. Last move error: ${error.message || "Request failed"}. Try again when ready.`);
         } else setStatus("Could not verify saved progress. Tap RESTORE SAVED DAILY before continuing.");
       }
       $("syncDaily").onclick = () => { if (!dailyBusy && !dailyLoading) loadDaily(); };

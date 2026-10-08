@@ -7,6 +7,15 @@ let result=await s.flipDailyCard(uid,day,0,18,{moves:0,firstIndex:null});assert.
 await assert.rejects(()=>s.flipDailyCard(uid,day,1,18,{moves:0,firstIndex:null}),/state changed/);
 await assert.rejects(()=>s.flipDailyCard(uid,day,0,18,{moves:0,firstIndex:0}),/visible/);
 const parallel=await Promise.allSettled([s.flipDailyCard(uid,day,2,18,{moves:0,firstIndex:0}),s.flipDailyCard(uid,day,1,18,{moves:0,firstIndex:0})]);assert.equal(parallel.filter(x=>x.status==='fulfilled').length,1);assert.equal((await s.getDailyChallenge(uid,day)).moves,1);
+// Regression: a mismatch must permit the next first card, including after reload.
+const mismatchUid='mismatch-tester';
+await s.saveDailyChallenge(mismatchUid,day,{day,attemptId:'mismatch',deck:['a','b','a','b'],matched:[],firstIndex:null,moves:0,score:0,status:'active',startedAt:new Date().toISOString()});
+await s.flipDailyCard(mismatchUid,day,0,18,{moves:0,firstIndex:null,attemptId:'mismatch'});
+const mismatch=await s.flipDailyCard(mismatchUid,day,1,18,{moves:0,firstIndex:0,attemptId:'mismatch'});
+assert.equal(mismatch.reveal.matched,false);assert.equal(mismatch.daily.moves,1);assert.equal(mismatch.daily.firstIndex,null);
+const resumed=await s.getDailyChallenge(mismatchUid,day);
+const third=await s.flipDailyCard(mismatchUid,day,2,18,{moves:resumed.moves,firstIndex:resumed.firstIndex,attemptId:resumed.attemptId});
+assert.equal(third.reveal.value,'a');assert.equal(third.daily.moves,1);assert.equal(third.daily.firstIndex,2);
 // Atomic best result never regresses under concurrent completed/status reconciliation.
 await Promise.all([s.recordDailyResult(uid,day,{moves:6,score:100,completedAt:'fixed'}),s.recordDailyResult(uid,day,{moves:9,score:50,completedAt:'later'})]);assert.equal((await s.getDailyBest(uid,day)).moves,6);await s.recordDailyResult(uid,day,{moves:6,score:100,completedAt:'new'});assert.equal((await s.getDailyBest(uid,day)).completedAt,'fixed');
 await s.recordDailyCompletion(uid,yesterday);await Promise.all([s.recordDailyCompletion(uid,day),s.recordDailyCompletion(uid,day)]);assert.equal((await s.getDailyMeta(uid,day)).streak.count,2);await s.recordDailyCompletion(uid,yesterday);assert.equal((await s.getDailyMeta(uid,day)).streak.lastDay,day);

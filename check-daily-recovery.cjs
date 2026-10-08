@@ -14,6 +14,7 @@ assert.equal(vm.runInContext('dailyNeedsSync',ui),true);
 vm.runInContext('api=async(path,body)=>body.action==="daily-status"?{daily:null,meta:{}}:{leaders:[]};',ui);
 await ui.restoreDailyAfterError(new Error('lost response'));
 assert.equal(vm.runInContext('dailyNeedsSync',ui),false);
+assert.match(el('status').textContent,/Last move error: lost response/);
 console.log('Uncertain response: failed recovery blocks moves; successful reload clears the block.');
 // A real timeout uses AbortController; the transport must honour abort like fetch.
 ui.fetch=async(path,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{const e=Error('aborted');e.name='AbortError';reject(e)}));ui.setTimeout=f=>setTimeout(f,0);
