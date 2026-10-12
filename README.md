@@ -115,3 +115,16 @@ Admin labels distinguish unfinished Daily user-days from actual abandonment, exp
 - Malformed saved Daily records fail closed instead of being replaced with a new challenge.
 
 Automated fault injection covers lost replies after Redis commits, concurrent taps, expired locks, old-attempt requests, streak/result reconciliation and telemetry deduplication. It does not audit historical production balances. A fulfillment marker written by older code without its ticket cannot be safely repaired automatically: compare the verified payment, fulfillment marker and ticket-use history manually before any adjustment. Telemetry remains best effort and can omit events.
+
+
+## Classic weekly earned points — effective October 12, 2026
+
+The Classic Weekly Top 10 counts positive increments of the persisted personal score during the UTC week (Monday 00:00 UTC), rather than the historical total. Partial saves accrue points; completing a level makes the player eligible for that week. Once eligible, subsequent saved points, including points earned after Game Over/restart, update the ranking. Personal score and level remain preserved.
+
+One Redis Lua operation commits the game state, weekly points and ranking. Cumulative-score high-water deltas make duplicate, concurrent and response-loss retries idempotent; stale lower-score writes cannot roll progress back. Frontend saves and completions share a serialized queue and retry uncertain transport/server failures once. Classic scoring remains client-calculated and bounded, not a server-controlled deck or prize-grade anti-cheat system.
+
+New v2 ranking keys isolate the new rule and leave legacy weeks untouched. Weekly counters/ranking records retain the existing 14-day expiry; personal progress is not expired. No cron or destructive reset is required. Existing local/cached clients are supported by the backend.
+
+Deployment-time limitation: scores already saved by the old code after October 12 00:00 UTC and before deployment cannot be attributed exactly without historical snapshots. They are not reconstructed from lifetime totals or invented. The first positive score increment processed by the new backend is included; there is no discarded first-game baseline.
+
+`REDIS_TEST_SERVER=/path/to/isolated/redis-server npm test` includes first-game, partial-save, duplicate, concurrent-write, Game Over, response-loss, rollover and persistence checks against real local Lua. These tests use mock Pi identity and never access production wallets/storage.

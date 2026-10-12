@@ -51,12 +51,7 @@ async function claimPayment(uid, paymentId) { const key=paymentKey(paymentId), c
 async function grantPremium(uid,paymentId){await claimPayment(uid,paymentId);await command(["SET",premiumKey(uid),"1"]);}
 
 async function getGameState(uid){if(!isStoreConfigured())return null;const raw=await command(["GET",gameStateKey(uid)]);if(!raw)return null;try{const p=JSON.parse(raw);return{level:Number(p.level)||1,lives:Number.isFinite(Number(p.lives))?Number(p.lives):5,score:Number(p.score)||0,updatedAt:p.updatedAt||null};}catch{return null;}}
-async function saveGameState(uid,state){
-  const level=Math.max(1,Math.min(100,Math.trunc(Number(state?.level)||1))),lives=Math.max(0,Math.min(999,Math.trunc(Number(state?.lives)||0))),score=Math.max(0,Math.min(1000000000,Math.trunc(Number(state?.score)||0))),current=await getGameState(uid),currentLevel=Math.max(1,Number(current?.level)||1),currentScore=Math.max(0,Number(current?.score)||0);
-  if(level>currentLevel+1){const error=new Error("Invalid Classic progression");error.statusCode=400;throw error;}
-  if(score<currentScore||score>maxClassicScore(level+1)){const error=new Error("Invalid Classic score");error.statusCode=400;throw error;}
-  const value=JSON.stringify({level,lives,score,updatedAt:new Date().toISOString()});await command(["SET",gameStateKey(uid),value]);return{level,lives,score};
-}
+async function saveGameState(uid,state){return commitClassicProgress(uid,state,false);}
 
 // Redis cjson encodes an empty Lua array as {}. Restore only that known
 // representation; reject other malformed values instead of discarding progress.
@@ -172,31 +167,64 @@ return credits-1`;
 }
 async function consumeReplayCredit(uid){const count=await getReplayCredits(uid);if(count<1)throw new Error("A Daily Replay Ticket is required");await command(["DECR",replayCreditsKey(uid)]);return count-1;}
 async function saveProfile(uid,username){const value=JSON.stringify({uid,username:typeof username==="string"?username.slice(0,64):null});await command(["SET",profileKey(uid),value]);}
-function classicWeekStart(){const date=new Date(),offset=(date.getUTCDay()+6)%7;date.setUTCDate(date.getUTCDate()-offset);return date.toISOString().slice(0,10);}
+function classicWeekStart(now=new Date()){const date=new Date(now),offset=(date.getUTCDay()+6)%7;date.setUTCDate(date.getUTCDate()-offset);return date.toISOString().slice(0,10);}
 function maxClassicScore(levelReached){const completed=Math.max(0,Math.trunc(Number(levelReached)||1)-1);let total=0;for(let level=1;level<=completed;level++){const pairs=level===1?2:level<=3?8:10;total+=20*pairs*(pairs+1)/2+(pairs>=3?50:0);}return total;}
 async function getClassicLeaderboard(uid,week=classicWeekStart()){
-  const ids=await command(["ZREVRANGE",classicLeaderboardKey(week),0,9]),list=Array.isArray(ids)?ids:[],keys=[];
-  for(const id of list)keys.push(profileKey(id),classicBestKey(id,week));
+  const ids=await command(["ZREVRANGE",activeClassicLeaderboardKey(week),0,9]),list=Array.isArray(ids)?ids:[],keys=[];
+  for(const id of list)keys.push(profileKey(id),activeClassicBestKey(id,week));
   const values=keys.length?await command(["MGET",...keys]):[];
   const leaders=list.map((id,index)=>{let profile=null,best=null;try{profile=values?.[index*2]?JSON.parse(values[index*2]):null;}catch{}try{best=values?.[index*2+1]?JSON.parse(values[index*2+1]):null;}catch{}return{rank:index+1,username:profile?.username||"Pioneer",score:best?.score||0,level:best?.level||1};});
-  const ownRank=await command(["ZREVRANK",classicLeaderboardKey(week),uid]),ownRaw=await command(["GET",classicBestKey(uid,week)]);let ownBest=null;try{ownBest=ownRaw?JSON.parse(ownRaw):null;}catch{}
+  const ownRank=await command(["ZREVRANK",activeClassicLeaderboardKey(week),uid]),ownRaw=await command(["GET",activeClassicBestKey(uid,week)]);let ownBest=null;try{ownBest=ownRaw?JSON.parse(ownRaw):null;}catch{}
   return{week,leaders,position:ownRank===null?null:Number(ownRank)+1,ownBest};
 }
-async function recordClassicResult(uid,levelReached,scoreValue){
-  const level=Math.trunc(Number(levelReached)),score=Math.trunc(Number(scoreValue)),week=classicWeekStart();
-  if(!Number.isInteger(level)||level<2||level>100||!Number.isInteger(score)||score<0){const error=new Error("Invalid Classic result");error.statusCode=400;throw error;}
-  if(score>maxClassicScore(level)){const error=new Error("Classic score is outside the valid range");error.statusCode=400;throw error;}
-  const accepted=await command(["SET",classicCompletionKey(uid,week,level),String(score),"NX","EX",1209600]);
-  if(accepted==="OK"){
-    const raw=await command(["GET",classicBestKey(uid,week)]);let current=null;try{current=raw?JSON.parse(raw):null;}catch{}
-    const next={level,score,completedAt:new Date().toISOString()};
-    if(!current||score>Number(current.score)||(score===Number(current.score)&&level>Number(current.level))){
-      await command(["SET",classicBestKey(uid,week),JSON.stringify(next),"EX",1209600]);
-      await command(["ZADD",classicLeaderboardKey(week),score*1000+level,uid]);
-      await command(["EXPIRE",classicLeaderboardKey(week),1209600]);
-    }
-  }
-  return getClassicLeaderboard(uid,week);
+// New keys preserve historical rankings and prevent legacy lifetime totals entering new weeks.
+const CLASSIC_WEEKLY_EFFECTIVE = "2026-10-12";
+const activeClassicBestKey=(uid,week)=>week>=CLASSIC_WEEKLY_EFFECTIVE?`arena:classic-weekly-v2:${week}:${uid}`:classicBestKey(uid,week);
+const activeClassicLeaderboardKey=week=>week>=CLASSIC_WEEKLY_EFFECTIVE?`arena:classic-weekly-board-v2:${week}`:classicLeaderboardKey(week);
+const classicWeeklyPointsKey=(uid,week)=>`arena:classic-weekly-points-v2:${week}:${uid}`;
+async function commitClassicProgress(uid,state,completed=false){
+  const level=Number(state?.level),lives=Number(state?.lives),score=Number(state?.score);
+  if(!Number.isInteger(level)||level<1||level>100||!Number.isInteger(lives)||lives<0||lives>999||!Number.isInteger(score)||score<0||score>1000000000){const e=new Error("Invalid Classic state");e.statusCode=400;throw e;}
+  const now=new Date(),week=classicWeekStart(now);
+  const script=`
+local raw=redis.call("GET",KEYS[1])
+local old={level=1,lives=5,score=0}
+if raw then local ok,value=pcall(cjson.decode,raw); if not ok or type(value)~="table" or not tonumber(value.score) or not tonumber(value.level) then return redis.error_reply("Stored Classic progress requires review") end; old=value end
+local score=tonumber(ARGV[1]); local level=tonumber(ARGV[2]); local oldScore=tonumber(old.score); local oldLevel=tonumber(old.level)
+local stale=score<oldScore
+if stale then
+ if ARGV[6]~="1" or level>oldLevel then return cjson.encode(old) end
+ score=oldScore; level=oldLevel
+end
+if level>oldLevel+1 then return redis.error_reply("Invalid Classic progression") end
+local delta=score-oldScore
+if delta>tonumber(ARGV[5]) then return redis.error_reply("Classic score is outside the valid range") end
+local points=tonumber(redis.call("GET",KEYS[2]) or "0")
+if not points or points<0 then return redis.error_reply("Weekly points require review") end
+points=points+delta
+local bestRaw=redis.call("GET",KEYS[3]); local best=nil
+if bestRaw then local ok,value=pcall(cjson.decode,bestRaw); if not ok or type(value)~="table" then return redis.error_reply("Weekly ranking requires review") end; best=value end
+local next={level=math.max(level,oldLevel),lives=tonumber(ARGV[3]),score=score,updatedAt=ARGV[4]}
+if stale then next=old end
+if score==oldScore and level<oldLevel then return cjson.encode(old) end
+local boardType=redis.call("TYPE",KEYS[4]).ok
+if boardType~="none" and boardType~="zset" then return redis.error_reply("Weekly ranking requires review") end
+local publish=ARGV[6]=="1" or best~=nil
+local encoded=cjson.encode(next)
+redis.call("SET",KEYS[1],encoded)
+redis.call("SET",KEYS[2],tostring(points),"EX",1209600)
+if publish and points>0 then
+ local entry={level=next.level,score=points,completedAt=ARGV[4],scoring="weekly-earned-v2"}
+ redis.call("SET",KEYS[3],cjson.encode(entry),"EX",1209600)
+ redis.call("ZADD",KEYS[4],points*1000+next.level,ARGV[7])
+ redis.call("EXPIRE",KEYS[4],1209600)
+end
+return encoded`;
+  return JSON.parse(await command(["EVAL",script,4,gameStateKey(uid),classicWeeklyPointsKey(uid,week),activeClassicBestKey(uid,week),activeClassicLeaderboardKey(week),score,level,lives,now.toISOString(),maxClassicScore(level+1),completed?"1":"0",uid]));
+}
+async function recordClassicResult(uid,levelReached,scoreValue,lives=5){
+  await commitClassicProgress(uid,{level:Number(levelReached),score:Number(scoreValue),lives:Number(lives)},true);
+  return getClassicLeaderboard(uid);
 }
 async function recordDailyAttempt(uid,day){const count=Number(await command(["INCR",dailyAttemptsKey(uid,day)]));if(count===1)await command(["EXPIRE",dailyAttemptsKey(uid,day),259200]);return count;}
 async function getDailyBest(uid,day){const raw=await command(["GET",dailyBestKey(uid,day)]);if(!raw)return null;try{return JSON.parse(raw);}catch{return null;}}

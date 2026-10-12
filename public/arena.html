@@ -460,6 +460,7 @@
             </div>
             <div class="leaderboard">
               <h3>CLASSIC WEEKLY TOP 10 <span id="classicOwnPosition"></span></h3>
+              <p class="muted">Points earned this UTC week · resets Monday 00:00 UTC. Your personal total and level stay saved.</p>
               <ol id="classicLeaders">
                 <li>Complete a level to enter this week’s ranking</li>
               </ol>
@@ -626,15 +627,21 @@
       function setStatus(t) {
         $("status").textContent = t;
       }
-      async function saveProgress() {
-        if (accessToken && storeReady)
-          try {
-            await api("/api/game-state", {
-              action: "save",
-              state: { level, lives, score },
-            });
-          } catch {}
+      let classicSaveQueue = Promise.resolve();
+      function queueClassicProgress(completed=false) {
+        if (!accessToken || !storeReady) return Promise.resolve();
+        const snapshot={level,lives,score};
+        const task=classicSaveQueue.then(async()=>{
+          const body=completed?{action:"classic-complete",...snapshot}:{action:"save",state:snapshot};
+          let data;
+          try { data=await api("/api/game-state",body); }
+          catch(error) { if(error.status && error.status<500)throw error; data=await api("/api/game-state",body); }
+          if(completed)renderClassicLeaderboard(data);
+        });
+        classicSaveQueue=task.catch(error=>setStatus("Classic save failed · "+error.message+" · retry before closing"));
+        return classicSaveQueue;
       }
+      async function saveProgress() { return queueClassicProgress(false); }
       async function loadProgress() {
         if (!storeReady) return false;
         const d = await api("/api/game-state", { action: "load" });
@@ -793,24 +800,11 @@
         $("classicOwnPosition").textContent = data?.position ? `Your rank #${data.position}` : "";
         $("classicLeaders").innerHTML = data?.leaders?.length
           ? data.leaders.map((entry) =>
-              `<li><b>@${escapeHtml(entry.username)}</b><small>Level ${entry.level} · ${entry.score} pts</small></li>`
+              `<li><b>@${escapeHtml(entry.username)}</b><small>Level ${entry.level} · ${entry.score} weekly pts</small></li>`
             ).join("")
           : "<li>Complete a level to enter this week’s ranking</li>";
       }
-      async function submitClassicCompletion() {
-        if (!storeReady) return;
-        try {
-          const data = await api("/api/game-state", {
-            action: "classic-complete",
-            level,
-            score,
-            lives,
-          });
-          renderClassicLeaderboard(data);
-        } catch (error) {
-          console.warn("Classic result", error.message);
-        }
-      }
+      async function submitClassicCompletion() { return queueClassicProgress(true); }
       $("restart").onclick = () => {
         lives = Math.min(5 + level - 1, 10);
         initGame(true);
