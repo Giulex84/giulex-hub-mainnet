@@ -128,3 +128,11 @@ New v2 ranking keys isolate the new rule and leave legacy weeks untouched. Weekl
 Deployment-time limitation: scores already saved by the old code after October 12 00:00 UTC and before deployment cannot be attributed exactly without historical snapshots. They are not reconstructed from lifetime totals or invented. The first positive score increment processed by the new backend is included; there is no discarded first-game baseline.
 
 `REDIS_TEST_SERVER=/path/to/isolated/redis-server npm test` includes first-game, partial-save, duplicate, concurrent-write, Game Over, response-loss, rollover and persistence checks against real local Lua. These tests use mock Pi identity and never access production wallets/storage.
+
+
+## Weekly cosmetic badges (October 12, 2026)
+Classic weekly points count earned score increments, not lifetime totals. Historical progress remains saved. Equal weekly scores share competition rank (1, 1, 3); lifetime level no longer changes the displayed position. Top-three positions earn permanent gold/silver/bronze badges, with all ties included. Premium affects Classic scoring, so this is cosmetic recognition, not an equal-condition contest or a monetary reward.
+
+The first eligible week starts October 12 UTC; first awards are available October 19 UTC. Closed weeks are finalized atomically on the next authenticated Classic leaderboard request, not by a scheduled job. All enrolled weeks are reconciled, so players can return late and still receive their badges. New badge-eligible weekly entries, completed award snapshots and per-user badges persist; pre-existing legacy weeks are not awarded or reset. The Hall of Fame displays the eight latest closed weeks; personal badges remain permanent. No Pi payouts, frames or paid advantages are introduced.
+
+Progress, points and rank writes are atomic. Lower-score stale saves cannot roll back historical progress. Finalized weeks reject delayed writes before mutation and the client can retry against the current week. Existing scores saved before the weekly-rule deployment cannot be safely backfilled from lifetime totals. All Testnet key prefixes and payment settings remain isolated.

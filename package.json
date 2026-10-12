@@ -5,7 +5,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node check-daily-recovery.cjs && node tests/check-admin.cjs && node tests/check-payments.cjs && node tests/check-redis.cjs && node tests/check-classic-weekly.cjs",
+    "test": "node check-daily-recovery.cjs && node tests/check-admin.cjs && node tests/check-payments.cjs && node tests/check-redis.cjs && node tests/check-classic-weekly.cjs && node tests/check-classic-badges.cjs",
     "test:redis": "node tests/check-redis.cjs"
   },
   "dependencies": {

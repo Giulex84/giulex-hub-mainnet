@@ -169,13 +169,66 @@ async function consumeReplayCredit(uid){const count=await getReplayCredits(uid);
 async function saveProfile(uid,username){const value=JSON.stringify({uid,username:typeof username==="string"?username.slice(0,64):null});await command(["SET",profileKey(uid),value]);}
 function classicWeekStart(now=new Date()){const date=new Date(now),offset=(date.getUTCDay()+6)%7;date.setUTCDate(date.getUTCDate()-offset);return date.toISOString().slice(0,10);}
 function maxClassicScore(levelReached){const completed=Math.max(0,Math.trunc(Number(levelReached)||1)-1);let total=0;for(let level=1;level<=completed;level++){const pairs=level===1?2:level<=3?8:10;total+=20*pairs*(pairs+1)/2+(pairs>=3?50:0);}return total;}
+const classicAwardKey=week=>`arena:classic-awards-v1:${week}`;
+const classicBadgesKey=uid=>`arena:classic-badges-v1:${uid}`;
+const classicAwardWeeksKey="arena:classic-award-weeks-v1";
+async function closeClassicWeeks(currentWeek=classicWeekStart()){
+  const weeks=await command(["SMEMBERS",classicAwardWeeksKey]);
+  for(const week of weeks||[]){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(week)||week<CLASSIC_WEEKLY_EFFECTIVE||week>=currentWeek)continue;
+    const script=`
+if redis.call("EXISTS",KEYS[2])==1 then return 0 end
+local rows=redis.call("ZREVRANGE",KEYS[1],0,-1,"WITHSCORES")
+local winners={}; local previous=nil; local rank=0
+for i=1,#rows,2 do
+ local score=math.floor(tonumber(rows[i+1])/1000)
+ if score~=previous then rank=(i+1)/2; previous=score end
+ if rank>3 then break end
+ if score>0 then
+  local uid=rows[i]; local name="Pioneer"; local profile=redis.call("GET",ARGV[2]..uid)
+  if profile then local ok,p=pcall(cjson.decode,profile); if not ok then return redis.error_reply("Winner profile requires review") end; name=p.username or name end
+  local badge={week=ARGV[1],rank=rank,score=score,username=name,awardedAt=ARGV[4]}
+  local kind=redis.call("TYPE",ARGV[3]..uid).ok
+  if kind~="none" and kind~="hash" then return redis.error_reply("Badges require review") end
+  table.insert(winners,{uid=uid,badge=badge})
+ end
+end
+for _,winner in ipairs(winners) do redis.call("HSET",ARGV[3]..winner.uid,ARGV[1],cjson.encode(winner.badge)) end
+redis.call("SET",KEYS[2],cjson.encode({week=ARGV[1],winners=winners,closedAt=ARGV[4]}))
+return #winners`;
+    await command(["EVAL",script,2,activeClassicLeaderboardKey(week),classicAwardKey(week),week,"arena:profile:","arena:classic-badges-v1:",new Date().toISOString()]);
+  }
+}
+async function getClassicAwards(uid){
+  const raw=await command(["HVALS",classicBadgesKey(uid)]);
+  const badges=(raw||[]).map(x=>JSON.parse(x)).sort((a,b)=>b.week.localeCompare(a.week));
+  const weeks=(await command(["SMEMBERS",classicAwardWeeksKey])||[]).filter(w=>w<classicWeekStart()).sort().reverse().slice(0,8);
+  const hall=[];for(const week of weeks){const raw=await command(["GET",classicAwardKey(week)]);if(raw){const a=JSON.parse(raw);hall.push({week,winners:(Array.isArray(a.winners)?a.winners:[]).map(w=>({rank:w.badge.rank,score:w.badge.score,username:w.badge.username}))});}}
+  return {badges,hall};
+}
 async function getClassicLeaderboard(uid,week=classicWeekStart()){
-  const ids=await command(["ZREVRANGE",activeClassicLeaderboardKey(week),0,9]),list=Array.isArray(ids)?ids:[],keys=[];
-  for(const id of list)keys.push(profileKey(id),activeClassicBestKey(id,week));
+  if(week>=CLASSIC_WEEKLY_EFFECTIVE){
+    const register=`if redis.call("EXISTS",KEYS[1])==1 then local ids=redis.call("ZRANGE",KEYS[1],0,-1); redis.call("PERSIST",KEYS[1]);for _,id in ipairs(ids) do redis.call("PERSIST",ARGV[2]..id) end;redis.call("SADD",KEYS[2],ARGV[1]) end;return 1`;
+    await command(["EVAL",register,2,activeClassicLeaderboardKey(week),classicAwardWeeksKey,week,"arena:classic-weekly-v2:"+week+":"]);
+  }
+  await closeClassicWeeks();
+  const script=`
+local rows=redis.call("ZREVRANGE",KEYS[1],0,9,"WITHSCORES"); local entries={}
+for i=1,#rows,2 do
+ local score=math.floor(tonumber(rows[i+1])/1000)
+ local rank=redis.call("ZCOUNT",KEYS[1],"("..tostring(score*1000+999),"+inf")+1
+ table.insert(entries,{uid=rows[i],rank=rank})
+end
+local own=redis.call("ZSCORE",KEYS[1],ARGV[1]);local position=cjson.null
+if own then position=redis.call("ZCOUNT",KEYS[1],"("..tostring(math.floor(tonumber(own)/1000)*1000+999),"+inf")+1 end
+return cjson.encode({entries=entries,position=position})`;
+  const result=JSON.parse(await command(["EVAL",script,1,activeClassicLeaderboardKey(week),uid]));
+  const list=Array.isArray(result.entries)?result.entries:[],keys=[];
+  for(const e of list)keys.push(profileKey(e.uid),activeClassicBestKey(e.uid,week));
   const values=keys.length?await command(["MGET",...keys]):[];
-  const leaders=list.map((id,index)=>{let profile=null,best=null;try{profile=values?.[index*2]?JSON.parse(values[index*2]):null;}catch{}try{best=values?.[index*2+1]?JSON.parse(values[index*2+1]):null;}catch{}return{rank:index+1,username:profile?.username||"Pioneer",score:best?.score||0,level:best?.level||1};});
-  const ownRank=await command(["ZREVRANK",activeClassicLeaderboardKey(week),uid]),ownRaw=await command(["GET",activeClassicBestKey(uid,week)]);let ownBest=null;try{ownBest=ownRaw?JSON.parse(ownRaw):null;}catch{}
-  return{week,leaders,position:ownRank===null?null:Number(ownRank)+1,ownBest};
+  const leaders=list.map((e,index)=>{const profile=values?.[index*2]?JSON.parse(values[index*2]):null,best=values?.[index*2+1]?JSON.parse(values[index*2+1]):null;return{rank:e.rank,username:profile?.username||"Pioneer",score:best?.score||0,level:best?.level||1};});
+  const ownRaw=await command(["GET",activeClassicBestKey(uid,week)]),ownBest=ownRaw?JSON.parse(ownRaw):null;
+  return{week,leaders,position:result.position,ownBest,...await getClassicAwards(uid)};
 }
 // New keys preserve historical rankings and prevent legacy lifetime totals entering new weeks.
 const CLASSIC_WEEKLY_EFFECTIVE = "2026-10-12";
@@ -187,6 +240,7 @@ async function commitClassicProgress(uid,state,completed=false){
   if(!Number.isInteger(level)||level<1||level>100||!Number.isInteger(lives)||lives<0||lives>999||!Number.isInteger(score)||score<0||score>1000000000){const e=new Error("Invalid Classic state");e.statusCode=400;throw e;}
   const now=new Date(),week=classicWeekStart(now);
   const script=`
+if redis.call("EXISTS",KEYS[6])==1 then return redis.error_reply("Weekly period changed. Retry saved progress.") end
 local raw=redis.call("GET",KEYS[1])
 local old={level=1,lives=5,score=0}
 if raw then local ok,value=pcall(cjson.decode,raw); if not ok or type(value)~="table" or not tonumber(value.score) or not tonumber(value.level) then return redis.error_reply("Stored Classic progress requires review") end; old=value end
@@ -215,12 +269,13 @@ redis.call("SET",KEYS[1],encoded)
 redis.call("SET",KEYS[2],tostring(points),"EX",1209600)
 if publish and points>0 then
  local entry={level=next.level,score=points,completedAt=ARGV[4],scoring="weekly-earned-v2"}
- redis.call("SET",KEYS[3],cjson.encode(entry),"EX",1209600)
+ redis.call("SET",KEYS[3],cjson.encode(entry))
  redis.call("ZADD",KEYS[4],points*1000+next.level,ARGV[7])
- redis.call("EXPIRE",KEYS[4],1209600)
+ redis.call("PERSIST",KEYS[4])
+ redis.call("SADD",KEYS[5],ARGV[8])
 end
 return encoded`;
-  return JSON.parse(await command(["EVAL",script,4,gameStateKey(uid),classicWeeklyPointsKey(uid,week),activeClassicBestKey(uid,week),activeClassicLeaderboardKey(week),score,level,lives,now.toISOString(),maxClassicScore(level+1),completed?"1":"0",uid]));
+  return JSON.parse(await command(["EVAL",script,6,gameStateKey(uid),classicWeeklyPointsKey(uid,week),activeClassicBestKey(uid,week),activeClassicLeaderboardKey(week),classicAwardWeeksKey,classicAwardKey(week),score,level,lives,now.toISOString(),maxClassicScore(level+1),completed?"1":"0",uid,week]));
 }
 async function recordClassicResult(uid,levelReached,scoreValue,lives=5){
   await commitClassicProgress(uid,{level:Number(levelReached),score:Number(scoreValue),lives:Number(lives)},true);
@@ -342,3 +397,4 @@ async function getMetricsReport(days){
   return labels.map((day,index)=>{const row=rows[index]||{},pairs=row.events||[],timingPairs=row.timings||[],events={},timings={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;for(let i=0;i<timingPairs.length;i+=2)timings[timingPairs[i]]=Number(timingPairs[i+1])||0;const durationCount=timings["daily_completed:count"]||0;return{day,uniqueUsers:Number(row.unique)||0,newUsers:Number(row.newUsers)||0,returningUsers:Number(row.returningUsers)||0,dailyStarters:Number(row.dailyStarters)||0,dailyCompleters:Number(row.dailyCompleters)||0,pvpStarters:Number(row.pvpStarters)||0,pvpCompleters:Number(row.pvpCompleters)||0,dailyDurationCount:durationCount,dailyDurationSum:timings["daily_completed:sum"]||0,averageDailySeconds:durationCount?Math.round((timings["daily_completed:sum"]||0)/durationCount):0,d1:Number(row.d1)||0,d3:Number(row.d3)||0,d7:Number(row.d7)||0,events};});
 }
 export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getClassicLeaderboard,recordClassicResult,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,startDailyChallenge,resetDailyChallenge,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,recordDailyCompletion,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};
+
