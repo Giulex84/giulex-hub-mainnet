@@ -55,7 +55,7 @@ export default async function handler(req,res){
     if(action==="classic-leaderboard")return res.status(200).json(await getClassicLeaderboard(user.uid));
     if(action==="classic-complete"){
       const level=Math.trunc(Number(req.body?.level)),score=Math.trunc(Number(req.body?.score)),lives=Math.trunc(Number(req.body?.lives));
-      if(!Number.isInteger(level)||level<2||level>100||!Number.isInteger(score)||score<0||!Number.isInteger(lives)||lives<0||lives>999)return res.status(400).json({error:"Invalid Classic result"});
+      if(!Number.isSafeInteger(level)||level<2||level>=Number.MAX_SAFE_INTEGER||!Number.isInteger(score)||score<0||!Number.isInteger(lives)||lives<0||lives>999)return res.status(400).json({error:"Invalid Classic result"});
       const leaderboard=await recordClassicResult(user.uid,level,score,lives);
       return res.status(200).json(leaderboard);
     }
@@ -159,3 +159,4 @@ export default async function handler(req,res){
     return res.status(400).json({error:"Unknown action"});
   }catch(error){return res.status(error?.message==="Unauthorized"?401:(error?.statusCode||500)).json({error:error?.message||"Request failed"});}
 };
+
