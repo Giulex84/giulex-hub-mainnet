@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),ts=require('typescript');
+(async()=>{let calls=0,fail=false;const m={exports:{}},ctx={module:m,exports:m.exports,Date,Map,Set,require:p=>p==='crypto'?require('crypto'):p==='./pi'?{getServerApiKey:()=> 'test-secret'}:{recordMetric:async()=>{calls++;if(fail)throw Error('offline');return true}}};vm.createContext(ctx);vm.runInContext(ts.transpileModule(fs.readFileSync('lib/metrics.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,ctx);const record=m.exports.safeRecordMetric;
+assert.equal(await record('u','daily_completed','attempt',60,'2026-10-19'),true);
+assert.equal(await record('u','daily_completed','attempt',60,'2026-10-19'),false);assert.equal(calls,1);
+await record('other','daily_completed','attempt',60,'2026-10-19');assert.equal(calls,2);
+await record('u','daily_completed','attempt',60,'2026-10-20');assert.equal(calls,3);
+await record('u','login');await record('u','login');assert.equal(calls,5,'real access counts are preserved');
+fail=true;await record('u','daily_started','retry');fail=false;assert.equal(await record('u','daily_started','retry'),true);assert.equal(calls,7,'failed writes retry');
+assert.equal(await record('u','daily_started','retry'),false);assert.equal(calls,7);
+for(let i=0;i<4100;i++)await record('u','daily_started','bounded-'+i);
+const before=calls;await record('u','daily_completed','attempt',60,'2026-10-19');assert.equal(calls,before+1,'bounded cache evicts old receipts');
+console.log('Metric receipts: duplicate requests avoided, users/days isolated, logins preserved, failed writes retry, bounded cache passed.');
+})().catch(e=>{console.error(e);process.exitCode=1});

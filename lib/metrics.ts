@@ -26,6 +26,12 @@ const EVENTS = new Set([
   "source_direct",
 ]);
 
+// Bounded, best-effort memoization of confirmed dedupe receipts. Redis remains
+// authoritative across instances; failures are never cached and can be retried.
+const confirmed = new Map<string, number>();
+const RECEIPT_TTL_MS = 86400000;
+const MAX_RECEIPTS = 4096;
+
 const day = () => new Date().toISOString().slice(0, 10);
 const pseudonym = (value: string) => crypto.createHmac("sha256", getServerApiKey()).update(value).digest("hex");
 
@@ -34,8 +40,17 @@ export async function safeRecordMetric(uid: string, event: string, dedupeId = ""
   try {
     const subject = pseudonym(`user:${uid}`);
     const dedupe = dedupeId ? pseudonym(`event:${uid}:${event}:${dedupeId}`) : "";
-    return await recordMetric(eventDay, subject, event, dedupe, value);
+    const receipt = dedupe ? `${eventDay}:${dedupe}` : "";
+    const now = Date.now();
+    if (receipt && (confirmed.get(receipt) || 0) > now) return false;
+    const recorded = await recordMetric(eventDay, subject, event, dedupe, value);
+    if (receipt) {
+      if (confirmed.size >= MAX_RECEIPTS) confirmed.delete(confirmed.keys().next().value!);
+      confirmed.set(receipt, now + RECEIPT_TTL_MS);
+    }
+    return recorded;
   } catch {
     return false;
   }
 }
+
