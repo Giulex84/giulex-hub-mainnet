@@ -44,6 +44,7 @@ const metricsEventUsersKey = (day,event) => `arena:metrics:event-users:${day}:${
 const metricsNewUsersKey = (day) => `arena:metrics:new-users:${day}`;
 const metricsReturningUsersKey = (day) => `arena:metrics:returning-users:${day}`;
 const metricsFirstSeenKey = (subject) => `arena:metrics:first-seen:${subject}`;
+const metricsSeenKey = (day) => `arena:metrics:seen:${day}`;
 const metricsTimingsKey = (day) => `arena:metrics:timings:${day}`;
 
 async function hasPremium(uid) { if (!isStoreConfigured()) return false; return (await command(["GET", premiumKey(uid)])) === "1"; }
@@ -377,21 +378,30 @@ if ARGV[3]~="" then
   local created=redis.call("SET",KEYS[3],"1","NX","EX",ARGV[6])
   if not created then return 0 end
 end
-redis.call("PFADD",KEYS[1],ARGV[1])
-redis.call("EXPIRE",KEYS[1],ARGV[6])
-redis.call("HINCRBY",KEYS[2],ARGV[2],1)
-redis.call("EXPIRE",KEYS[2],ARGV[6])
-redis.call("SADD",KEYS[4],ARGV[1]); redis.call("EXPIRE",KEYS[4],ARGV[6])
-local first=redis.call("GET",KEYS[7])
-if not first then
-  redis.call("SET",KEYS[7],ARGV[4],"EX",ARGV[6]); redis.call("SADD",KEYS[5],ARGV[1]); redis.call("EXPIRE",KEYS[5],ARGV[6])
-elseif first~=ARGV[4] then
-  redis.call("SADD",KEYS[6],ARGV[1]); redis.call("EXPIRE",KEYS[6],ARGV[6])
+-- Attendance and first-seen classification are needed once per subject/day,
+-- not on every event. A separate set preserves the existing HLL history.
+if redis.call("SADD",KEYS[9],ARGV[1])==1 then
+  redis.call("EXPIRE",KEYS[9],ARGV[6])
+  redis.call("PFADD",KEYS[1],ARGV[1]); redis.call("EXPIRE",KEYS[1],ARGV[6])
+  local first=redis.call("GET",KEYS[7])
+  if not first then
+    redis.call("SET",KEYS[7],ARGV[4],"EX",ARGV[6])
+    redis.call("SADD",KEYS[5],ARGV[1]); redis.call("EXPIRE",KEYS[5],ARGV[6])
+  elseif first~=ARGV[4] then
+    redis.call("SADD",KEYS[6],ARGV[1]); redis.call("EXPIRE",KEYS[6],ARGV[6])
+  end
+end
+-- Refresh retention only when a counter is first created for this event.
+if redis.call("HINCRBY",KEYS[2],ARGV[2],1)==1 then redis.call("EXPIRE",KEYS[2],ARGV[6]) end
+-- Only these five membership sets are consumed by the report/retention.
+local event=ARGV[2]
+if event=="login" or event=="daily_started" or event=="daily_completed" or event=="pvp_started" or event=="pvp_completed" then
+  if redis.call("SADD",KEYS[4],ARGV[1])==1 then redis.call("EXPIRE",KEYS[4],ARGV[6]) end
 end
 local numeric=tonumber(ARGV[5]) or 0
-if numeric>0 then redis.call("HINCRBYFLOAT",KEYS[8],ARGV[2]..":sum",numeric); redis.call("HINCRBY",KEYS[8],ARGV[2]..":count",1); redis.call("EXPIRE",KEYS[8],ARGV[6]) end
+if numeric>0 then redis.call("HINCRBYFLOAT",KEYS[8],ARGV[2]..":sum",numeric); if redis.call("HINCRBY",KEYS[8],ARGV[2]..":count",1)==1 then redis.call("EXPIRE",KEYS[8],ARGV[6]) end end
 return 1`;
-  return Number(await command(["EVAL",script,8,metricsUniqueKey(day),metricsEventsKey(day),metricsDedupeKey(dedupeId||"none"),metricsEventUsersKey(day,event),metricsNewUsersKey(day),metricsReturningUsersKey(day),metricsFirstSeenKey(subject),metricsTimingsKey(day),subject,event,dedupeId,day,Math.max(0,Number(value)||0),34560000]))===1;
+  return Number(await command(["EVAL",script,9,metricsUniqueKey(day),metricsEventsKey(day),metricsDedupeKey(dedupeId||"none"),metricsEventUsersKey(day,event),metricsNewUsersKey(day),metricsReturningUsersKey(day),metricsFirstSeenKey(subject),metricsTimingsKey(day),metricsSeenKey(day),subject,event,dedupeId,day,Math.max(0,Number(value)||0),34560000]))===1;
 }
 async function getMetricsReport(days){
   const count=Math.max(1,Math.min(90,Math.trunc(Number(days)||30))),keys=[],labels=[];
