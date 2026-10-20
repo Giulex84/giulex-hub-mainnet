@@ -372,45 +372,36 @@ return cjson.encode({match=match,reveal=reveal})`;
 }
 
 async function markPaymentPending(uid,paymentId){await claimPayment(uid,paymentId);}
-async function recordMetric(day,subject,event,dedupeId="",value=0){
+// BEGIN MINIMAL ATTENDANCE
+async function recordMetric(day,subject,event,dedupeId='',value=0){
+  if(event!=='login'||!subject||!/^\d{4}-\d{2}-\d{2}$/.test(day))return false;
+  const prefix="arena:metrics:";
   const script=`
-if ARGV[3]~="" then
-  local created=redis.call("SET",KEYS[3],"1","NX","EX",ARGV[6])
-  if not created then return 0 end
+local count=redis.call('HINCRBY',KEYS[1],'login',1)
+if count==1 then redis.call('EXPIRE',KEYS[1],ARGV[3]) end
+if redis.call('SADD',KEYS[2],ARGV[1])==1 then
+ redis.call('EXPIRE',KEYS[2],ARGV[3])
+ local first=redis.call('GET',KEYS[4])
+ if not first then redis.call('SET',KEYS[4],ARGV[2],'EX',ARGV[3])
+ elseif first<ARGV[2] then redis.call('HINCRBY',KEYS[3],'returning',1); redis.call('EXPIRE',KEYS[4],ARGV[3]) end
+ redis.call('SET',KEYS[5],ARGV[2],'NX','EX',ARGV[3])
+ redis.call('HSETNX',KEYS[3],'startedAt',ARGV[4]); redis.call('EXPIRE',KEYS[3],ARGV[3])
 end
--- Attendance and first-seen classification are needed once per subject/day,
--- not on every event. A separate set preserves the existing HLL history.
-if redis.call("SADD",KEYS[9],ARGV[1])==1 then
-  redis.call("EXPIRE",KEYS[9],ARGV[6])
-  redis.call("PFADD",KEYS[1],ARGV[1]); redis.call("EXPIRE",KEYS[1],ARGV[6])
-  local first=redis.call("GET",KEYS[7])
-  if not first then
-    redis.call("SET",KEYS[7],ARGV[4],"EX",ARGV[6])
-    redis.call("SADD",KEYS[5],ARGV[1]); redis.call("EXPIRE",KEYS[5],ARGV[6])
-  elseif first~=ARGV[4] then
-    redis.call("SADD",KEYS[6],ARGV[1]); redis.call("EXPIRE",KEYS[6],ARGV[6])
-  end
-end
--- Refresh retention only when a counter is first created for this event.
-if redis.call("HINCRBY",KEYS[2],ARGV[2],1)==1 then redis.call("EXPIRE",KEYS[2],ARGV[6]) end
--- Only these five membership sets are consumed by the report/retention.
-local event=ARGV[2]
-if event=="login" or event=="daily_started" or event=="daily_completed" or event=="pvp_started" or event=="pvp_completed" then
-  if redis.call("SADD",KEYS[4],ARGV[1])==1 then redis.call("EXPIRE",KEYS[4],ARGV[6]) end
-end
-local numeric=tonumber(ARGV[5]) or 0
-if numeric>0 then redis.call("HINCRBYFLOAT",KEYS[8],ARGV[2]..":sum",numeric); if redis.call("HINCRBY",KEYS[8],ARGV[2]..":count",1)==1 then redis.call("EXPIRE",KEYS[8],ARGV[6]) end end
 return 1`;
-  return Number(await command(["EVAL",script,9,metricsUniqueKey(day),metricsEventsKey(day),metricsDedupeKey(dedupeId||"none"),metricsEventUsersKey(day,event),metricsNewUsersKey(day),metricsReturningUsersKey(day),metricsFirstSeenKey(subject),metricsTimingsKey(day),metricsSeenKey(day),subject,event,dedupeId,day,Math.max(0,Number(value)||0),34560000]))===1;
+  return Number(await command(['EVAL',script,5,prefix+'events:'+day,prefix+'login-users-v1:'+day,prefix+'login-summary-v1:'+day,prefix+"first-seen:"+subject,prefix+'login-tracking-start-v1',subject,day,34560000,new Date().toISOString()]))===1;
 }
+// END MINIMAL ATTENDANCE
+// BEGIN MINIMAL REPORT
 async function getMetricsReport(days){
-  const count=Math.max(1,Math.min(90,Math.trunc(Number(days)||30))),keys=[],labels=[];
-  const dateAt=(offset)=>new Date(Date.now()-offset*86400000).toISOString().slice(0,10);
-  for(let offset=0;offset<count;offset++){const date=dateAt(offset);labels.push(date);keys.push(metricsUniqueKey(date),metricsEventsKey(date),metricsNewUsersKey(date),metricsReturningUsersKey(date),metricsEventUsersKey(date,"daily_started"),metricsEventUsersKey(date,"daily_completed"),metricsEventUsersKey(date,"pvp_started"),metricsEventUsersKey(date,"pvp_completed"),metricsTimingsKey(date),metricsEventUsersKey(dateAt(offset-1),"login"),metricsEventUsersKey(dateAt(offset-3),"login"),metricsEventUsersKey(dateAt(offset-7),"login"));}
-  const script=`local out={}; for i=1,#KEYS,12 do local unique=redis.call("PFCOUNT",KEYS[i]); local events=redis.call("HGETALL",KEYS[i+1]); local timings=redis.call("HGETALL",KEYS[i+8]); table.insert(out,{unique=unique,events=events,newUsers=redis.call("SCARD",KEYS[i+2]),returningUsers=redis.call("SCARD",KEYS[i+3]),dailyStarters=redis.call("SCARD",KEYS[i+4]),dailyCompleters=redis.call("SCARD",KEYS[i+5]),pvpStarters=redis.call("SCARD",KEYS[i+6]),pvpCompleters=redis.call("SCARD",KEYS[i+7]),timings=timings,d1=#redis.call("SINTER",KEYS[i+2],KEYS[i+9]),d3=#redis.call("SINTER",KEYS[i+2],KEYS[i+10]),d7=#redis.call("SINTER",KEYS[i+2],KEYS[i+11])}) end; return cjson.encode(out)`;
-  const rows=JSON.parse(await command(["EVAL",script,keys.length,...keys]));
-  return labels.map((day,index)=>{const row=rows[index]||{},pairs=row.events||[],timingPairs=row.timings||[],events={},timings={};for(let i=0;i<pairs.length;i+=2)events[pairs[i]]=Number(pairs[i+1])||0;for(let i=0;i<timingPairs.length;i+=2)timings[timingPairs[i]]=Number(timingPairs[i+1])||0;const durationCount=timings["daily_completed:count"]||0;return{day,uniqueUsers:Number(row.unique)||0,newUsers:Number(row.newUsers)||0,returningUsers:Number(row.returningUsers)||0,dailyStarters:Number(row.dailyStarters)||0,dailyCompleters:Number(row.dailyCompleters)||0,pvpStarters:Number(row.pvpStarters)||0,pvpCompleters:Number(row.pvpCompleters)||0,dailyDurationCount:durationCount,dailyDurationSum:timings["daily_completed:sum"]||0,averageDailySeconds:durationCount?Math.round((timings["daily_completed:sum"]||0)/durationCount):0,d1:Number(row.d1)||0,d3:Number(row.d3)||0,d7:Number(row.d7)||0,events};});
+  const count=Math.max(1,Math.min(90,Math.trunc(Number(days)||30))),prefix="arena:metrics:",labels=[],keys=[];
+  for(let offset=0;offset<count;offset++){const day=new Date(Date.now()-offset*86400000).toISOString().slice(0,10);labels.push(day);keys.push(prefix+'events:'+day,prefix+'login-users-v1:'+day,prefix+'login-summary-v1:'+day,prefix+'unique:'+day,prefix+'returning-users:'+day)}
+  keys.push(prefix+'login-tracking-start-v1');
+  const script=`local out={};local start=redis.call('GET',KEYS[#KEYS]);for i=1,#KEYS-1,5 do local users=redis.call('SCARD',KEYS[i+1]);local modern=users>0;local returning=cjson.null;if modern then returning=tonumber(redis.call('HGET',KEYS[i+2],'returning') or '0') else returning=redis.call('SCARD',KEYS[i+4]) end;table.insert(out,{users=modern and users or redis.call('PFCOUNT',KEYS[i+3]),logins=tonumber(redis.call('HGET',KEYS[i],'login') or '0'),returning=returning,modern=modern,transition=(start==ARGV[(i+4)/5]),startedAt=redis.call('HGET',KEYS[i+2],'startedAt') or cjson.null}) end;return cjson.encode(out)`;
+  const raw=JSON.parse(await command(['EVAL',script,keys.length,...keys,...labels]));
+  return labels.map((day,i)=>{const r=raw[i]||{};return {day,uniqueUsers:Number(r.users)||0,returningUsers:r.returning===null?null:Number(r.returning)||0,events:{login:Number(r.logins)||0},tracking:r.modern?'login-only':'legacy-activity',trackingStartedAt:r.startedAt||null,transitionDay:day==="2026-10-20",dataPartial:day==='2026-10-20'}});
 }
+// END MINIMAL REPORT
 export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getClassicLeaderboard,recordClassicResult,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,startDailyChallenge,resetDailyChallenge,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,recordDailyCompletion,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport};
+
 
 
