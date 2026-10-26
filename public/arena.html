@@ -422,7 +422,6 @@
           <h1>Arena</h1>
           <p>Memory, skill and daily challenges</p>
         </div>
-        <span class="badge">PI TESTNET</span>
       </header>
 <section class="panel">
         <div class="preferences"><label>Language <select id="app-language" aria-label="Language"><option value="en">English</option><option value="it">Italiano</option><option value="es">Español</option><option value="fr">Français</option><option value="pt">Português</option><option value="de">Deutsch</option><option value="id">Bahasa Indonesia</option><option value="zh">中文</option></select></label></div>
@@ -430,7 +429,7 @@
         <button id="reconnect" class="action secondary hidden">SIGN IN AGAIN</button>
         <a class="help-link" href="mailto:glnmigliaccio@gmail.com?subject=Arena%20support">Help and support</a>
         <div id="identity" class="identity">
-          <span>Sign in with Pi to play</span><strong id="sync">TESTNET</strong>
+          <span>Sign in with Pi to play</span><strong id="sync">MAINNET</strong>
         </div>
         <button id="login" class="action">SIGN IN WITH PI</button>
         <div id="app" class="hidden">
@@ -465,7 +464,7 @@
             ><button id="premium" class="action premium">
               UNLOCK PREMIUM · 1 π
             </button>
-            <p class="purchase-note">Premium costs 1 π once: unlimited Classic lives and double base points in Classic. It does not change Daily or PvP rules. Test π has no monetary value.</p>
+            <p class="purchase-note">Premium costs 1 π once: unlimited Classic lives and double base points in Classic. It does not change Daily or PvP rules.</p>
             <div id="premiumFeedback" role="status" aria-live="polite"></div>
             <div id="premiumActive" class="daily-result hidden">
               ★ Premium active
@@ -663,7 +662,7 @@
         if (paymentBusy || $("purchaseDialog").open) return;
         const premiumPurchase=product==="premium";
         $("purchaseTitle").textContent=premiumPurchase?"Classic Premium · 1 π":"Replay Ticket · 0.5 π";
-        $("purchaseDescription").textContent=premiumPurchase?"One payment unlocks unlimited Classic lives and double base points in Classic. Daily and PvP are unchanged. The current board is preserved. Test π has no monetary value.":"Buying adds one replay credit without replacing your current Daily. After finishing today’s challenge, using one credit starts a new board. Your best result is kept. Test π has no monetary value.";
+        $("purchaseDescription").textContent=premiumPurchase?"One payment unlocks unlimited Classic lives and double base points in Classic. Daily and PvP are unchanged. The current board is preserved.":"Buying adds one replay credit without replacing your current Daily. After finishing today’s challenge, using one credit starts a new board. Your best result is kept.";
         pendingPurchase=callback;
         const d=$("purchaseDialog"); if(d.showModal)d.showModal();else d.setAttribute("open","");
       }
