@@ -2,12 +2,20 @@
 
 This revision follows the current Pi developer architecture: Pi SDK on the frontend, `/v2/me` verification on the backend, Server API Key only on the backend, and U2A approval/completion performed server-side.
 
-## Review / release status
+## Verified status — 2026-10-31
+
+User-supplied Developer Portal screenshot shows Arena Mainnet Ecosystem Listing Listed and PiNet Active. The public Pi Apps screenshot also shows Arena as a Mainnet App, but its image displays No Image. The cause of that image discrepancy is not established.
+
+Production baseline: `d759cdfd5250da271a0852bb04ad6814ddcafa4a`; Vercel production READY and mapped to this commit. Authenticated functionality was not retested. package.json has no app version; do not invent a technical version from a portal label.
+
+The owner reports that jr.pi opens Arena. A formal auction-claim status screen for that domain was not acquired. The lost-seed app-wallet issue is documented in ticket PINETWORK-5851408 and is distinct from listing status; no secrets are required for this reconciliation.
+
+## Product configuration and historical review record
 
 - Network: **Pi Mainnet**
 - PiNet URL: **https://jr.pi** (open in Pi Browser)
 - Pi SDK mode: `sandbox: false`
-- Developer Portal version submitted for review: **1.0.3**
+- Historically recorded Developer Portal update version: **1.0.3**; current update status requires confirmation
 - Authentication: Pi SDK only
 - Transactions: Pi only
 - Premium: **1 Pi U2A**, verified server-side and persisted by verified Pi UID
@@ -21,7 +29,7 @@ This revision follows the current Pi developer architecture: Pi SDK on the front
 - Mainnet A2U gameplay rewards: **disabled intentionally** until explicitly authorized for the production app
 - Public review documents: `privacy.html`, `terms.html`, and `validation-key.txt` on the verified production domain (`https://jr.pi` in Pi Browser)
 
-The Mainnet update is currently in review under Developer Portal version **1.0.3**. The portal submitted the update directly and did not permit changing this field; do not cancel or recreate the request solely to alter the version label.
+An earlier record described a Mainnet listing update in review under Developer Portal version **1.0.3**. This is not a statement that Arena is currently unlisted. The portal submitted the update directly and did not permit changing this field; do not cancel or recreate the request solely to alter the version label.
 
 On **September 30, 2026**, a Developer Portal listing update was submitted for review with the refreshed Arena crossed-swords logo and current Classic, Daily and PvP screenshots. This listing-only refresh does not change Arena's data processing, payments or gameplay terms, so the Privacy Policy and Terms of Service remain accurate without a date-only revision.
 
@@ -141,3 +149,4 @@ Progress, points and rank writes are atomic. Lower-score stale saves cannot roll
 ## Minimal analytics release
 
 New analytics collect successful Mainnet Pi logins, distinct daily accounts and returning accounts only. Other analytics events are ignored without storage writes. Legacy data is preserved; missing historical return counts are not reconstructed. Reports distinguish login-only collection from older activity counters. The Arena October 20, 2026 incident is marked as partial data, not backfilled. Payment receipts and gameplay persistence are unchanged.
+
