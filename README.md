@@ -1,5 +1,12 @@
 # Arena — Pi Mainnet hardening build
 
+## App documentation · 14 November 2026
+
+[Privacy Policy](public/privacy.html) · [Terms of Service](public/terms.html)
+
+Privacy covers public rankings and sign-in metrics. The terms describe optional purchases and the weekly Daily cosmetics.
+
+
 This revision follows the current Pi developer architecture: Pi SDK on the frontend, `/v2/me` verification on the backend, Server API Key only on the backend, and U2A approval/completion performed server-side.
 
 ## Verified status — 2026-10-31
