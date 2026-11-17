@@ -255,12 +255,21 @@
 <section class="panel"><div id="gate"><button id="login" class="action">VERIFICA CON PI</button><div id="gateStatus" class="status">Accesso riservato al proprietario.</div></div>
 <div id="dashboard" class="hidden"><div class="toolbar"><select id="days" aria-label="Periodo del rapporto"><option value="7">Ultimi 7 giorni</option><option value="30" selected>Ultimi 30 giorni</option><option value="90">Ultimi 90 giorni</option></select><button id="refresh">Aggiorna</button></div>
 <div class="cards"><div class="metric">ACCESSI PI RIUSCITI<b id="logins">0</b></div><div class="metric">UTENTI GIORNALIERI · SOMMA<b id="unique">0</b></div><div class="metric">RITORNI GIORNALIERI · SOMMA<b id="returningUsers">0</b></div></div>
-<div class="table-wrap"><table><thead><tr><th>Giorno UTC</th><th>Utenti</th><th>Di ritorno</th><th>Accessi</th><th>Note</th></tr></thead><tbody id="rows"></tbody></table></div><div id="reportStatus" class="status" aria-live="polite"></div></div>
+<section class="panel"><h2>Daily · 17–20 novembre</h2><p id="summitInfo"></p><div id="summitRows"></div><p>Utenti distinti per evento e giorno UTC. Solo Daily gratuito. Il 17 parte dalla pubblicazione. Esiti recuperati possono riferirsi a sfide iniziate prima della raccolta. Arresto automatico il 21 novembre alle 00:00 italiane.</p></section><div class="table-wrap"><table><thead><tr><th>Giorno UTC</th><th>Utenti</th><th>Di ritorno</th><th>Accessi</th><th>Note</th></tr></thead><tbody id="rows"></tbody></table></div><div id="reportStatus" class="status" aria-live="polite"></div></div>
 <p class="note">Gli utenti giornalieri e i ritorni sono sommati per giorno, non sono persone distinte nel periodo. Un ritorno è un account già osservato in un giorno UTC precedente, entro la conservazione di 400 giorni. I dati storici possono includere attività diverse dal login e un conteggio utenti approssimativo. — significa dato non disponibile. La giornata di passaggio alla nuova raccolta ha conteggi utenti parziali. Le metriche non certificano l'idoneità Pi Ad Network.</p>
 </section></main><script>
 const $=id=>document.getElementById(id);let accessToken=null,reportSequence=0;
 async function loadReport(){if(!accessToken)return;const sequence=++reportSequence;$('reportStatus').textContent='Caricamento…';try{
 const response=await fetch('/api/metrics?days='+encodeURIComponent($('days').value),{headers:{Authorization:'Bearer '+accessToken},cache:'no-store'}),data=await response.json();if(sequence!==reportSequence)return;if(!response.ok)throw Error(data.error||'Accesso non autorizzato o servizio non disponibile');
+const summit=data.summit;
+if(summit){
+ $('summitInfo').textContent=summit.startedAt?'Raccolta iniziata: '+new Date(summit.startedAt).toLocaleString('it-IT'):'In attesa del primo evento.';
+ $('summitRows').replaceChildren(...summit.rows.map(row=>{
+  const line=document.createElement('p');
+  line.textContent=row.day+' · Login: '+row.login+' · Daily avviati: '+row.daily_started+' · Completati: '+row.daily_completed+' · Falliti: '+row.daily_failed;
+  return line;
+ }));
+}
 const totals={logins:0,unique:0,returningUsers:0};let unavailable=false;
 $('rows').replaceChildren(...data.rows.map(row=>{const tr=document.createElement('tr'),events=row.events||{},users=Number(row.uniqueUsers)||0,logins=Number(events.login)||0,ret=row.returningUsers==null?null:Number(row.returningUsers)||0;totals.logins+=logins;totals.unique+=users;if(ret===null)unavailable=true;else totals.returningUsers+=ret;
 const notes=[];if(row.dataPartial)notes.push('Dati parziali: disservizio Upstash del 20 ottobre');if(row.transitionDay)notes.push('Passaggio alla raccolta login: utenti parziali');if(row.tracking==='legacy-activity')notes.push('Storico attività');

@@ -598,3 +598,24 @@ async function getDailyWeeklyLeaderboard(uid){
 }
 
 export {isStoreConfigured,hasPremium,claimPayment,grantPremium,getGameState,saveGameState,getClassicLeaderboard,recordClassicResult,getDailyChallenge,saveDailyChallenge,acquireDailyLock,releaseDailyLock,flipDailyCard,getReplayCredits,grantReplayCredit,consumeReplayCredit,startDailyChallenge,resetDailyChallenge,saveProfile,recordDailyAttempt,getDailyBest,recordDailyResult,recordDailyCompletion,getDailyMeta,getDailyLeaderboard,getPvpMatch,savePvpMatch,getUserPvpMatch,setUserPvpMatch,clearUserPvpMatch,getPvpQueue,setPvpQueue,clearPvpQueue,acquirePvpLock,releasePvpLock,acquirePvpMatchLock,releasePvpMatchLock,flipPvpCard,markPaymentPending,recordMetric,getMetricsReport,recordLoginReward,getLoginReward,getDailyWeeklyLeaderboard};
+
+// Temporary summit measurement, isolated from historical attendance.
+async function recordSummitMetric(day,subject,event){
+ const now=Date.now();
+ if(now<Date.parse('2026-11-17T00:00:00+01:00')||now>=Date.parse('2026-11-21T00:00:00+01:00'))return false;
+ if(!['login','daily_started','daily_completed','daily_failed'].includes(event))return false;
+ // Original free Daily attempts only, from UTC days in the measurement window.
+ if(!/^2026-11-(17|18|19|20)$/.test(day))return false;
+ const script=`local added=redis.call('SADD',KEYS[1],ARGV[1]);redis.call('EXPIRE',KEYS[1],7776000);redis.call('SET',KEYS[2],ARGV[2],'NX','EX',7776000);return added`;
+ return Number(await command(['EVAL',script,2,'arena:summit-20261117:'+day+':'+event,'arena:summit-20261117:startedAt',subject,new Date().toISOString()]))===1;
+}
+async function getSummitReport(){
+ const days=['2026-11-17','2026-11-18','2026-11-19','2026-11-20'];
+ const events=['login','daily_started','daily_completed','daily_failed'];
+ const keys=days.flatMap(day=>events.map(event=>'arena:summit-20261117:'+day+':'+event));
+ const script=`local result={};for _,key in ipairs(KEYS) do table.insert(result,redis.call('SCARD',key)) end;return result`;
+ const counts=await command(['EVAL',script,keys.length,...keys]);
+ const startedAt=await command(['GET','arena:summit-20261117:startedAt']);
+ return {startedAt,endsAt:'2026-11-20T23:00:00Z',rows:days.map((day,index)=>({day,...Object.fromEntries(events.map((event,offset)=>[event,Number(counts[index*4+offset])||0]))}))};
+}
+export {recordSummitMetric,getSummitReport};

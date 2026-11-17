@@ -111,10 +111,10 @@ export default async function handler(req, res) {
             if (daily?.status === "completed") {
                 await recordDailyResult(user.uid, day, daily);
                 await recordDailyCompletion(user.uid, day);
-                await safeRecordMetric(user.uid, "daily_completed", daily.completedAt || day, Math.max(1, Math.round((Date.parse(daily.completedAt) - Date.parse(daily.startedAt)) / 1000)), day);
+                await safeRecordMetric(user.uid, daily.replay ? "summit_replay_ignored" : "daily_completed", daily.completedAt || day, Math.max(1, Math.round((Date.parse(daily.completedAt) - Date.parse(daily.startedAt)) / 1000)), day);
             }
             if (daily?.status === "failed")
-                await safeRecordMetric(user.uid, "daily_failed", daily.completedAt || day, 0, day);
+                await safeRecordMetric(user.uid, daily.replay ? "summit_replay_ignored" : "daily_failed", daily.completedAt || day, 0, day);
             const meta = await getDailyMeta(user.uid, day);
             return res.status(200).json({ daily: daily ? publicDaily(daily) : null, meta, replayCredits: await getReplayCredits(user.uid) });
         }
@@ -125,7 +125,7 @@ export default async function handler(req, res) {
                 if (!daily) {
                     daily = { day, attemptId: crypto.randomUUID(), deck: shuffle([...DAILY_SYMBOLS, ...DAILY_SYMBOLS]), matched: [], firstIndex: null, moves: 0, score: 0, status: "active", startedAt: new Date().toISOString() };
                     daily = await startDailyChallenge(user.uid, day, daily, lockId);
-                    await safeRecordMetric(user.uid, "daily_started", daily.startedAt, 0, day);
+                    await safeRecordMetric(user.uid, daily.replay ? "summit_replay_ignored" : "daily_started", daily.startedAt, 0, day);
                 }
                 return res.status(200).json({ daily: publicDaily(daily), meta: await getDailyMeta(user.uid, day) });
             }
@@ -173,9 +173,9 @@ export default async function handler(req, res) {
                 meta = await getDailyMeta(user.uid, day);
             }
             if (result.reveal && !result.reveal.pending && daily.status === "completed")
-                await safeRecordMetric(user.uid, "daily_completed", daily.completedAt || day, Math.max(1, Math.round((Date.parse(daily.completedAt) - Date.parse(daily.startedAt)) / 1000)), day);
+                await safeRecordMetric(user.uid, daily.replay ? "summit_replay_ignored" : "daily_completed", daily.completedAt || day, Math.max(1, Math.round((Date.parse(daily.completedAt) - Date.parse(daily.startedAt)) / 1000)), day);
             if (result.reveal && !result.reveal.pending && daily.status === "failed")
-                await safeRecordMetric(user.uid, "daily_failed", daily.completedAt || day, 0, day);
+                await safeRecordMetric(user.uid, daily.replay ? "summit_replay_ignored" : "daily_failed", daily.completedAt || day, 0, day);
             return res.status(200).json({ daily: publicDaily(daily), meta, reveal: result.reveal });
         }
         if (action === "pvp-status") {
