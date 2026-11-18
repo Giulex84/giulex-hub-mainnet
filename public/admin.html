@@ -255,7 +255,7 @@
 <section class="panel"><div id="gate"><button id="login" class="action">VERIFICA CON PI</button><div id="gateStatus" class="status">Accesso riservato al proprietario.</div></div>
 <div id="dashboard" class="hidden"><div class="toolbar"><select id="days" aria-label="Periodo del rapporto"><option value="7">Ultimi 7 giorni</option><option value="30" selected>Ultimi 30 giorni</option><option value="90">Ultimi 90 giorni</option></select><button id="refresh">Aggiorna</button></div>
 <div class="cards"><div class="metric">ACCESSI PI RIUSCITI<b id="logins">0</b></div><div class="metric">UTENTI GIORNALIERI · SOMMA<b id="unique">0</b></div><div class="metric">RITORNI GIORNALIERI · SOMMA<b id="returningUsers">0</b></div></div>
-<section class="panel"><h2>Daily · 17–20 novembre</h2><p id="summitInfo"></p><div id="summitRows"></div><p>Utenti distinti per giorno UTC, solo Daily gratuito. Esiti e percentuali includono gli account con avvio misurato nello stesso giorno. La raccolta è best effort. Senza esito osservato significa che la sfida può ancora essere ripresa. Il 17 parte dalla pubblicazione. Il 20 termina alle 23:00 UTC, mezzanotte italiana.</p></section><div class="table-wrap"><table><thead><tr><th>Giorno UTC</th><th>Utenti</th><th>Di ritorno</th><th>Accessi</th><th>Note</th></tr></thead><tbody id="rows"></tbody></table></div><div id="reportStatus" class="status" aria-live="polite"></div></div>
+<section class="panel"><h2>Daily · 17–20 novembre</h2><p id="summitInfo"></p><div id="summitRows"></div><p>Il campione conta utenti autenticati unici, anche con accessi ripetuti. La tabella ordinaria sotto mostra utenti unici e numero totale di accessi nell’intera giornata UTC. Il primo giorno del campione copre solo il periodo successivo all’attivazione. Avvii ed esiti riguardano il Daily gratuito. Esiti e percentuali includono gli account con avvio misurato nello stesso giorno. La raccolta è best effort. Senza esito osservato significa che la sfida può ancora essere ripresa. Il 17 parte dalla pubblicazione. Il 20 termina alle 23:00 UTC, mezzanotte italiana.</p></section><div class="table-wrap"><table><thead><tr><th>Giorno UTC</th><th>Utenti unici</th><th>Di ritorno</th><th>Accessi totali</th><th>Note</th></tr></thead><tbody id="rows"></tbody></table></div><div id="reportStatus" class="status" aria-live="polite"></div></div>
 <p class="note">Gli utenti giornalieri e i ritorni sono sommati per giorno, non sono persone distinte nel periodo. Un ritorno è un account già osservato in un giorno UTC precedente, entro la conservazione di 400 giorni. I dati storici possono includere attività diverse dal login e un conteggio utenti approssimativo. — significa dato non disponibile. La giornata di passaggio alla nuova raccolta ha conteggi utenti parziali. Le metriche non certificano l'idoneità Pi Ad Network.</p>
 </section></main><script>
 const $=id=>document.getElementById(id);let accessToken=null,reportSequence=0;
@@ -266,20 +266,24 @@ if(summit?.unavailable){
  $('summitInfo').textContent='Rapporto Daily temporaneamente non disponibile. Riprova aggiornando.';
  $('summitRows').replaceChildren();
 }else if(summit){
- $('summitInfo').textContent=summit.startedAt?'Raccolta iniziata: '+new Date(summit.startedAt).toLocaleString('it-IT'):'In attesa del primo evento.';
+ $('summitInfo').textContent=summit.startedAt?'Campione attivo dal '+new Date(summit.startedAt).toLocaleString('it-IT',{timeZone:'Europe/Rome'})+' (ora italiana).':'In attesa del primo evento.';
  $('summitRows').replaceChildren(...summit.rows.map(row=>{
   const line=document.createElement('p');
+  if(row.day>new Date().toISOString().slice(0,10)){
+   line.textContent=row.day+' · Giornata futura';
+   return line;
+  }
   const completed=Number(row.measuredCompletions)||0,failed=Number(row.measuredFailures)||0,started=Number(row.daily_started)||0;
   const pending=Math.max(0,started-completed-failed);
   const rate=started?((completed/started)*100).toFixed(1)+'%':'—';
-  line.textContent=row.day+' · Login: '+row.login+' · Avvii misurati: '+started+' · Completati: '+completed+' · Falliti: '+failed+' · Senza esito osservato: '+pending+' · Completamento: '+rate;
+  line.textContent=row.day+' · Utenti unici nel campione: '+row.login+' · Avvii misurati: '+started+' · Completati: '+completed+' · Falliti: '+failed+' · Senza esito osservato: '+pending+' · Completamento: '+rate;
   return line;
  }));
 }
 const totals={logins:0,unique:0,returningUsers:0};let unavailable=false;
 $('rows').replaceChildren(...data.rows.map(row=>{const tr=document.createElement('tr'),events=row.events||{},users=Number(row.uniqueUsers)||0,logins=Number(events.login)||0,ret=row.returningUsers==null?null:Number(row.returningUsers)||0;totals.logins+=logins;totals.unique+=users;if(ret===null)unavailable=true;else totals.returningUsers+=ret;
 const notes=[];if(row.dataPartial)notes.push('Dati parziali: disservizio Upstash del 20 ottobre');if(row.transitionDay)notes.push('Passaggio alla raccolta login: utenti parziali');if(row.tracking==='legacy-activity')notes.push('Storico attività');
-const values=[row.day,users,ret===null?'—':ret,logins,notes.join(' · ')||'Login Pi'],labels=['Giorno UTC','Utenti','Di ritorno','Accessi','Note'];values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=String(value);td.dataset.label=labels[i];tr.appendChild(td)});return tr}));
+const values=[row.day,users,ret===null?'—':ret,logins,notes.join(' · ')||'Login Pi'],labels=['Giorno UTC','Utenti unici','Di ritorno','Accessi totali','Note'];values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=String(value);td.dataset.label=labels[i];tr.appendChild(td)});return tr}));
 for(const key of Object.keys(totals))$(key).textContent=String(totals[key])+(key==='returningUsers'&&unavailable?'*':'');
 $('reportStatus').classList.remove('error');$('reportStatus').textContent='Aggiornato '+new Date(data.generatedAt).toLocaleString('it-IT')+(unavailable?' · * Somma dei soli giorni con ritorni disponibili.':'');
 }catch(e){if(sequence!==reportSequence)return;$('reportStatus').textContent=e.message;$('reportStatus').classList.add('error')}}
