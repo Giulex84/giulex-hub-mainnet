@@ -30,7 +30,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!isStoreConfigured()) return res.status(503).json({ error: "Persistent store is not configured" });
   const days = Math.max(1, Math.min(90, Number(req.query.days) || 30));
   try {
-    return res.status(200).json({ generatedAt: new Date().toISOString(), retentionDays: 400, rows: await getMetricsReport(days), summit: await getSummitReport() });
+    let summit;
+    try { summit = await getSummitReport(); }
+    catch { summit = { unavailable: true }; }
+    return res.status(200).json({ generatedAt: new Date().toISOString(), retentionDays: 400, rows: await getMetricsReport(days), summit });
   } catch (error: any) {
     return res.status(500).json({ error: error?.message || "Metrics request failed" });
   }

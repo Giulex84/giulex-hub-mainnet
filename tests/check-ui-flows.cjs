@@ -2,6 +2,8 @@ const {JSDOM}=require(process.env.JSDOM_MODULE_PATH||'jsdom'),fs=require('fs'),a
 const html=fs.readFileSync('public/arena.html','utf8'),translations=fs.readFileSync('public/ux-i18n.js','utf8'),pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function make({incomplete=false}={}){
  const dom=new JSDOM(html,{url:'https://arena.test.invalid/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,d=w.document;
+ const observers=[],Observer=w.MutationObserver;
+ w.MutationObserver=class extends Observer{constructor(callback){super(callback);observers.push(this)}};
  let premium=false,failRecovery=incomplete,authenticated=false,recovers=0,walletCalls=0,lastSaved,daily=null,calls=[];
  const day=new Date().toISOString().slice(0,10);
  w.Pi={init(config){assert.equal(config.sandbox,false)},authenticate:async(scopes,onIncomplete)=>{if(incomplete)await onIncomplete({identifier:'unfinished',transaction:{txid:'tx'}});authenticated=true;return{accessToken:'verified-token'}},createPayment:(payment,callbacks)=>{walletCalls++;w.testWallet={payment,callbacks};}};
@@ -19,15 +21,15 @@ async function make({incomplete=false}={}){
  else if(body.action==='pvp-cancel')value={pvp:null,cancelled:true};
  else value={leaders:[]};return{ok:true,status:200,json:async()=>value};};
  for(const script of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g))if(!script[1].includes('src='))w.eval(script[2]);w.eval(translations);await pause(5);
- return{dom,w,d,stats:()=>({recovers,walletCalls,lastSaved,calls})};
+ return{dom,w,d,close:async()=>{observers.forEach(observer=>observer.disconnect());await pause(0);w.close()},stats:()=>({recovers,walletCalls,lastSaved,calls})};
 }
 (async()=>{
-let x=await make({incomplete:true});assert(!x.d.querySelector('#service-notice'));await x.d.getElementById('login').onclick();await pause(5);assert(x.d.getElementById('app').classList.contains('hidden'));assert(!x.d.getElementById('status').closest('.hidden'));await x.d.getElementById('login').onclick();await pause(5);assert(!x.d.getElementById('app').classList.contains('hidden'));assert(!x.d.getElementById('premiumActive').classList.contains('hidden'));assert.equal(x.stats().recovers,2);x.dom.window.close();
+let x=await make({incomplete:true});assert(!x.d.querySelector('#service-notice'));await x.d.getElementById('login').onclick();await pause(5);assert(x.d.getElementById('app').classList.contains('hidden'));assert(!x.d.getElementById('status').closest('.hidden'));await x.d.getElementById('login').onclick();await pause(5);assert(!x.d.getElementById('app').classList.contains('hidden'));assert(!x.d.getElementById('premiumActive').classList.contains('hidden'));assert.equal(x.stats().recovers,2);await x.close();
 x=await make();await x.d.getElementById('login').onclick();await pause(5);x.d.querySelector('#grid button').click();await pause(10);assert.equal(x.stats().lastSaved.board.cards.filter(c=>c.flipped&&!c.matched).length,1);
 x.d.getElementById('premium').click();await pause(5);assert.equal(x.stats().walletCalls,0);x.d.getElementById('purchaseConfirm').click();assert.equal(x.w.testWallet.payment.amount,1);x.w.testWallet.callbacks.onCancel();x.d.getElementById('buyReplay').click();x.d.getElementById('purchaseConfirm').click();assert.equal(x.w.testWallet.payment.amount,.5);x.w.testWallet.callbacks.onCancel();
 x.d.getElementById('dailyTab').click();await pause(10);await x.d.getElementById('startDaily').onclick();await x.w.dailyFlip(0);assert(x.stats().calls.some(c=>c.body.action==='daily-flip'));assert(x.d.getElementById('weeklyDailyLeaders').textContent.includes('winner'));assert.equal(x.d.getElementById('weeklyProgress').value,3);x.d.getElementById('cardStyle').value='ocean';x.d.getElementById('cardStyle').onchange();assert.equal(x.d.body.dataset.cardStyle,'ocean');assert.equal(x.w.localStorage.getItem('arena-card-style:u'),'ocean');assert(x.d.getElementById('loginRewardProgress').parentElement.hidden);
 for(const language of ['en','it','es','fr','pt','de','id','zh']){x.w.ArenaUI.setLanguage(language);await pause(5);assert.equal(x.d.documentElement.lang,language);assert(![...x.d.querySelectorAll('button,p,small,span')].some(el=>el.textContent.includes('undefined')));}
 x.w.ArenaUI.setLanguage('it');x.w.renderClassicLeaderboard({leaders:[{rank:1,username:'winner',score:100,level:2,previousWeekBadge:{rank:1,week:'2026-10-19'}}]});await pause(5);assert.equal(x.d.querySelector('#classicLeaders [role=img]').getAttribute('aria-label'),'Oro della settimana scorsa');
-x.d.getElementById('pvpTab').click();await pause(5);await x.d.getElementById('startPvp').onclick();await x.d.getElementById('cancelPvp').onclick();assert(x.d.getElementById('cancelPvp').classList.contains('hidden'));assert(!x.d.querySelector('meta[name=viewport]').content.includes('user-scalable=no'));x.dom.window.close();
+x.d.getElementById('pvpTab').click();await pause(5);await x.d.getElementById('startPvp').onclick();await x.d.getElementById('cancelPvp').onclick();assert(x.d.getElementById('cancelPvp').classList.contains('hidden'));assert(!x.d.querySelector('meta[name=viewport]').content.includes('user-scalable=no'));await x.close();
 console.log('DOM flow PASS: no outage notice; authenticated SDK recovery queue and retry; restored entitlements; saved board; wallet confirmation/test prices; Daily expectations; weekly cosmetic progression; 8 languages; medals; PvP cancellation; zoom. No real wallet or Pi API was used.');
 })().catch(e=>{console.error(e);process.exitCode=1});

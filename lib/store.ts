@@ -613,9 +613,18 @@ async function getSummitReport(){
  const days=['2026-11-17','2026-11-18','2026-11-19','2026-11-20'];
  const events=['login','daily_started','daily_completed','daily_failed'];
  const keys=days.flatMap(day=>events.map(event=>'arena:summit-20261117:'+day+':'+event));
- const script=`local result={};for _,key in ipairs(KEYS) do table.insert(result,redis.call('SCARD',key)) end;return result`;
+ const script=`local result={};for i=1,#KEYS,4 do
+ for j=i,i+3 do table.insert(result,redis.call('SCARD',KEYS[j])) end
+ table.insert(result,#redis.call('SINTER',KEYS[i+1],KEYS[i+2]))
+ table.insert(result,#redis.call('SINTER',KEYS[i+1],KEYS[i+3]))
+ end;return result`;
  const counts=await command(['EVAL',script,keys.length,...keys]);
  const startedAt=await command(['GET','arena:summit-20261117:startedAt']);
- return {startedAt,endsAt:'2026-11-20T23:00:00Z',rows:days.map((day,index)=>({day,...Object.fromEntries(events.map((event,offset)=>[event,Number(counts[index*4+offset])||0]))}))};
+ return {startedAt,endsAt:'2026-11-20T23:00:00Z',rows:days.map((day,index)=>({
+  day,
+  ...Object.fromEntries(events.map((event,offset)=>[event,Number(counts[index*6+offset])||0])),
+  measuredCompletions:Number(counts[index*6+4])||0,
+  measuredFailures:Number(counts[index*6+5])||0
+ }))};
 }
 export {recordSummitMetric,getSummitReport};

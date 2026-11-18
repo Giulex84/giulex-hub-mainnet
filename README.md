@@ -1,10 +1,10 @@
 # Arena — Pi Mainnet hardening build
 
-## App documentation · 14 November 2026
+## App documentation · 18 November 2026
 
 [Privacy Policy](public/privacy.html) · [Terms of Service](public/terms.html)
 
-Privacy covers public rankings and sign-in metrics. The terms describe optional purchases and the weekly Daily cosmetics.
+Privacy covers public rankings, ordinary sign-in metrics and the temporary November 17–20 Daily measurement. Terms describe purchases and the six weekly Daily cosmetic milestones. See [Pi Next readiness](docs/PI_NEXT_READINESS.md) for the evidence and outstanding checks.
 
 
 This revision follows the current Pi developer architecture: Pi SDK on the frontend, `/v2/me` verification on the backend, Server API Key only on the backend, and U2A approval/completion performed server-side.
@@ -28,7 +28,7 @@ The owner reports that jr.pi opens Arena. A formal auction-claim status screen f
 - Premium: **1 Pi U2A**, verified server-side and persisted by verified Pi UID
 - Daily Replay Ticket: **0.5 Pi U2A** consumable, verified and fulfilled server-side
 - Replay payments with any other amount are rejected by the Mainnet backend.
-- Classic Arena: persistent progression with a verified weekly Top 10 leaderboard, personal rank, level and score. Results are validated and recorded server-side by verified Pi UID.
+- Classic Arena: persistent progression with a weekly Top 10, personal rank, level and score. The backend bounds submitted progress and persists it under a Pi-verified UID. Classic scores are calculated by the client, and Premium doubles Classic base points.
 - Daily Arena: server-controlled, persistent per UTC day, with best result and Top 10 leaderboard
 - Daily Arena now creates an attempt only after an explicit Start; opening the tab only restores an existing attempt. The interface shows 6-pair progress and preserves same-day resume.
 - Async PvP: shared server-controlled deck, real Pioneer matchmaking and disclosed Arena Bot fallback
@@ -54,7 +54,7 @@ On **September 30, 2026**, a Developer Portal listing update was submitted for r
 - Wildcard CORS was removed and baseline security headers were added.
 - Dynamic Pi usernames are rendered as text rather than injected HTML.
 - Daily and PvP card flips use atomic server-side state transitions to prevent concurrent-move corruption and reduce latency.
-- First-party backend telemetry counts pseudonymous daily users and aggregate product events without cookies or advertising trackers. Reports require the private `ARENA_METRICS_KEY` header.
+- First-party attendance counts successful Pi sign-ins and pseudonymous daily accounts. The report requires owner Pi authentication or the private `ARENA_METRICS_KEY` header. The temporary Daily sample is described below.
 - Privacy Policy and Terms were updated to match actual data/payment behavior.
 
 
@@ -79,7 +79,7 @@ Copy `.env.example` values into your deployment provider:
 - `ARENA_KV_KV_REST_API_URL` and `ARENA_KV_KV_REST_API_TOKEN` (created automatically by Vercel/Upstash when using the `ARENA_KV` custom prefix): server-side Redis-compatible REST KV credentials.
 - `ARENA_METRICS_KEY`: a long random secret used only to read the private `/api/metrics` report. Telemetry collection does not expose this key to the browser.
 
-The private report includes new/returning users, unique Daily and PvP funnels, completion and drop-off rates, average Daily completion time, D1/D3/D7 cohort retention, and first-party source attribution (`?source=fireside`, `?source=staking`, or direct). These expanded fields begin collecting from the release that introduced them; older aggregate event counts remain visible.
+The private attendance report counts successful logins, distinct authenticated accounts per UTC day and accounts first observed on an earlier UTC day. Daily sums represent user-days. These counters do not measure D1/D3/D7 cohort retention, session length, source attribution or distinct accounts across a whole reporting period. Historical telemetry remains stored under its existing retention rules.
 
 The persistent store protects both paid Premium entitlement and gameplay progress. If it is not configured, login/gameplay can still load, but Premium purchase is intentionally unavailable and gameplay cannot be restored across sessions.
 
@@ -115,7 +115,7 @@ No code change can guarantee Pi Core Team approval; review and wallet authorizat
 
 Daily start and card-flip errors reload server state without replaying the move. If reload fails, card input stays blocked until the Restore Saved Daily action succeeds. Daily status reconciles completion ranking, idempotent streak and deduplicated completion/failure telemetry. Finished Daily challenges offer free Classic play; active challenges keep the Continue action. Rewards, prices and move limits are unchanged.
 
-Admin labels distinguish unfinished Daily user-days from actual abandonment, expose move-limit failure events separately, and identify staking counters as tagged-link source telemetry rather than listing staking balances. Run `npm test` for API/UI recovery, dashboard and payment-validation checks. The Redis suite is included and prints an explicit skip when no local Redis executable is provided. To run every check, use `REDIS_TEST_SERVER=/path/to/redis-server npm test`; `npm run test:redis` runs only the isolated Redis suite. These tests never connect to Mainnet Redis or execute a Pi payment and do not replace an authenticated Pi Browser connection-loss test.
+The temporary Daily report shows measured starts and their observed outcomes. Unfinished measured starts may include users who will resume later. The sample does not identify abandonment or measure staking balances. Run `npm test` for API/UI recovery, dashboard and payment-validation checks. The Redis suite is included and prints an explicit skip when no local Redis executable is provided. To run every check, use `REDIS_TEST_SERVER=/path/to/redis-server npm test`; `npm run test:redis` runs only the isolated Redis suite. These tests never connect to Mainnet Redis or execute a Pi payment and do not replace an authenticated Pi Browser connection-loss test.
 
 
 ## Mainnet reliability corrections
@@ -125,7 +125,7 @@ Admin labels distinguish unfinished Daily user-days from actual abandonment, exp
 - Completion best-result comparison and ranking updates are atomic. Reconciliation preserves the completion timestamp and cannot roll a streak back when an older day finishes late.
 - Status recovery reloads replay credits as well as the board. Input and replay reset stay blocked until uncertain state is restored; timeout coverage includes reading the response body.
 - Replay payment fulfillment writes its marker and ticket in one Lua operation. Both current and legacy recovery routes revalidate the final server payment lookup before delivery.
-- Daily telemetry keeps the server-selected challenge day when a request straddles midnight. The admin period duration is weighted by completed observations, and retention excludes cohorts whose observation day is still in progress. Older dashboard responses cannot replace a newer period.
+- Daily telemetry keeps the server-selected challenge day when a request straddles midnight. The ordinary report and temporary Daily report use server-side data. Older dashboard responses cannot replace a newer period.
 - Empty matched-card lists encoded as `{}` by Redis Lua are restored to arrays at the Daily/PvP response boundary. Other malformed lists fail closed.
 - Malformed saved Daily records fail closed instead of being replaced with a new challenge.
 
@@ -155,5 +155,15 @@ Progress, points and rank writes are atomic. Lower-score stale saves cannot roll
 
 ## Minimal analytics release
 
-New analytics collect successful Mainnet Pi logins, distinct daily accounts and returning accounts only. Other analytics events are ignored without storage writes. Legacy data is preserved; missing historical return counts are not reconstructed. Reports distinguish login-only collection from older activity counters. The Arena October 20, 2026 incident is marked as partial data, not backfilled. Payment receipts and gameplay persistence are unchanged.
+Ordinary analytics collect successful Mainnet Pi logins, distinct daily accounts and returning accounts. The time-limited Daily sample below adds three verified gameplay events. Legacy data is preserved; missing historical return counts are not reconstructed. Reports distinguish login-only collection from older activity counters. The Arena October 20, 2026 incident is marked as partial data, not backfilled. Payment receipts and gameplay persistence are unchanged.
 
+
+## Temporary Daily measurement · November 17–20, 2026
+
+Collection starts prospectively at deployment on November 17. It stops automatically at 2026-11-20T23:00:00Z, midnight entering November 21 in Europe/Rome. The first and last UTC rows are partial.
+
+Isolated `arena:summit-20261117:` keys count pseudonymous accounts per UTC day for successful login, original free Daily start, completion and move-limit failure. Paid replay attempts are excluded. Set insertion deduplicates repeated observations. Matched outcomes are intersections with the measured-start set, so recovery of an earlier unmeasured attempt cannot inflate the measured completion percentage.
+
+The owner dashboard shows starts, matched completions, matched failures, unfinished measured starts and the observed completion percentage. Telemetry is best effort. An unfinished start is not evidence that a player abandoned Arena. New-event or report storage failures must not break gameplay or hide the ordinary attendance report.
+
+Sample records expire within 90 days. A November 21 follow-up is scheduled to verify the cutoff and remove temporary collection hooks while retaining the report. `node tests/check-summit.cjs` checks the cutoff; `REDIS_TEST_SERVER=/path/to/redis-server node tests/check-summit-redis.cjs` checks real deduplication and report intersections.
