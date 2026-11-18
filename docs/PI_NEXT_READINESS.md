@@ -37,10 +37,14 @@ Temporary Daily measurement runs prospectively from deployment on November 17 th
 
 Validation for this update uses mock Pi identity and payment responses plus an isolated real Redis with persistence disabled. It does not issue real payments or read live player records.
 
+## Owner-reported Pi Browser acceptance · November 18, 2026
+
+The owner reports completing the requested close/reopen check and confirms that data persisted in Pi Browser. The accompanying screenshots confirm that the updated metrics labels are visible. This is owner-reported persistence evidence. Detailed interruption, new-device and purchase-recovery acceptance remain to be recorded individually.
+
 ## Owner/account checks that remain
 
 - Current Developer Portal listing, image, registered URLs and app-wallet state.
-- Real Pi Browser sign-in, interruption and same-day Daily restoration.
+- Detailed real-device interruption and same-day Daily restoration evidence, supplementing the owner's close/reopen persistence confirmation above.
 - Existing purchase restoration and payment recovery with a consenting test user.
 - Current Pi Ad Network eligibility and approval.
 - The official Pi Next rules, including whether existing apps and pre-event code are eligible.
