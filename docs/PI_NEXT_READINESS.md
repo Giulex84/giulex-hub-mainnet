@@ -82,3 +82,27 @@ Evaluate Pi Ads eligibility before monetization changes. Keep optional purchases
   Monetization approval and server verification of rewarded ads.
 
 The announced hackathon prize pool is 200,000 USDT. The marketing initiative has a separate shared budget of up to 20 million Pi. Selection, app approval and eligibility are decided by Pi. No competition win, individual prize amount or current program admission has been verified.
+
+## Official rules check · November 19, 2026, 08:25 Europe/Rome
+
+The official Summit landing page still labels November 19's hackathon announcement Upcoming. The November 18 official recap says full rules and registration instructions will be published November 19. Targeted official-domain searches did not locate the rules at this check. This is a time-bounded finding, not evidence that publication will be delayed.
+
+| Requirement | Verified status | Arena action |
+| --- | --- | --- |
+| Existing apps and pre-event code | Not yet verified | Preserve source history; do not claim eligibility |
+| Categories and judging criteria | Not yet verified | Keep Arena positioning and product evidence ready |
+| Registration and submission deadline/timezone | Not yet verified | Use only the eventual official registration link |
+| Video length, format and submission materials | Not yet verified | Keep current footage; prepare login, free Daily and same-day restore evidence |
+| Source licensing, ownership and publication obligations | Not yet verified | Inventory third-party licenses before accepting terms |
+| Prize allocation and payment conditions | Only total 200,000 USDT announced | Do not describe total pool as an individual award or Pi payment |
+| Marketing incentive | Separate shared budget up to 20 million Pi announced | Do not combine with hackathon award entitlement |
+
+Sources checked: https://minepi.com/ecosystem-summit/ and https://minepi.com/blog/pi-ecosystem-summit-2/ plus official-domain searches. No previous hackathon rules were substituted.
+
+### Performance and measurement check
+
+Vercel reports latest production deployment dpl_GFWinkSeZAMXnLwdgwdLwpFHeNT1 READY. Runtime-error lookup over the preceding 24 hours returned no errors; error/fatal/warning log lookup for the preceding 50 minutes returned no matching logs. Absence of reported errors does not establish successful authenticated gameplay or low latency. Hobby log retention prevents a detailed 48-hour reconstruction.
+
+No fresh authorized owner report or real authenticated latency trace was available in this run. The owner's November 18 23:23 Rome screenshot (22:23 UTC, partial day) records 95 unique accounts,78 previously seen accounts and110 successful sign-ins, versus193/186/224 for the complete November17 UTC day. These are unequal windows; no equivalent-window comparison or November19 outcome is asserted. A decline in successful sign-ins is not itself proof of latency.
+
+The previously identified awaited temporary database write without a dedicated timeout remains a risk requiring measured confirmation. No gameplay or telemetry collection code was changed during this check because persistent slowdown was not established. If slowdown is verified, the owner authorizes disabling only the temporary sample collection, preserving historical/sample data, ordinary metrics and the report. The November21 restoration remains in place.
