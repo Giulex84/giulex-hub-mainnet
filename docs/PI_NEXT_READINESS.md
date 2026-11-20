@@ -106,3 +106,25 @@ Vercel reports latest production deployment dpl_GFWinkSeZAMXnLwdgwdLwpFHeNT1 REA
 No fresh authorized owner report or real authenticated latency trace was available in this run. The owner's November 18 23:23 Rome screenshot (22:23 UTC, partial day) records 95 unique accounts,78 previously seen accounts and110 successful sign-ins, versus193/186/224 for the complete November17 UTC day. These are unequal windows; no equivalent-window comparison or November19 outcome is asserted. A decline in successful sign-ins is not itself proof of latency.
 
 The previously identified awaited temporary database write without a dedicated timeout remains a risk requiring measured confirmation. No gameplay or telemetry collection code was changed during this check because persistent slowdown was not established. If slowdown is verified, the owner authorizes disabling only the temporary sample collection, preserving historical/sample data, ordinary metrics and the report. The November21 restoration remains in place.
+
+## Published Pi Next requirements · November 20, 2026
+
+This section supersedes the November 19 morning publication-status check above. Source: https://minepi.com/pi-next/ (checked November 20).
+
+Registration: Developer Web Console, Hackathon tab; all team members register and one member submits each app. Optional midpoint details are communicated by email to registered participants. Deadline: January5,2027 23:59 PST = January6 07:59 UTC =08:59 Europe/Rome.
+
+Demo: final app version, public video platform link, at most180seconds. Explain purpose, features/interface, intended users, need addressed and Pi integration. App needs English name/accurate English description, compliant logo, interface preview images, PiNet integration and privacy policy. Preserve current logo-review submission; do not edit the listing during review.
+
+Judges evaluate listing alignment, Pi utility/ecosystem needs, technical completeness/innovation, UI/UX/accessibility, long-term Mainnet utility and distinctive use cases. Judges' Pick awards:25,000/15,000/10,000USDT. Community Engagement Awards share150,000USDT across up to2teams, combining judges' assessment, real engagement,retention and traction. The separate marketing budget is up to20millionPi, not a guaranteed award.
+
+The public page supports bringing existing applications to Pi but does not explicitly settle eligibility for an already-listed Mainnet app, pre-event work or prior participants. No explicit source-license assignment terms or demo network mandate were found there. Developer Console exposes only a JavaScript application to the research reader; registration conditions have not been inspected or accepted. Do not assert Arena eligibility or registration completion until those conditions are checked.
+
+### Arena demo assembly and narration draft
+
+Owner recordings reviewed visually:141362 Classic178to179 and saved status;141363 Daily result,weekly progress/styles;141364 PvP versus explicitly identified Arena Bot;141599 Mainnet access verification,original Daily start,moves and completed result11moves695points,weekly4/7. The previously missing Daily-start footage is now available. Do not combine the earlier801point result with this new Daily as though they were the same run. Continuous close/reopen restoration evidence remains unverified in these sampled clips. Audio has not been verified.
+
+Target edit around120–150seconds, beneath180second limit: introduction/home10s;Classic25s;Daily from14159940s;weeklystyles20s;PvP15s;Pi integration/closing15s. Trim URL typing,keyboard,empty loading and long scrolls; retain enough real action to show outcomes. No payment should be performed solely for filming. Record a short restoration clip only if it is to be explicitly demonstrated.
+
+English narration draft: Arena is a memory and skill game for Pioneers who enjoy short challenges and lasting progression. Players sign in with their Pi account. In Classic, matching pairs builds combos and advances levels. The free Daily is a server-controlled challenge with six pairs and an eighteen-move limit. This recording shows a completed Daily in eleven moves. Original free Daily completions on distinct days within the same UTC week unlock personal card styles at two through seven days. Unlocked styles remain available. Asynchronous PvP supports Pioneer opponents and an explicitly labeled optional Arena Bot. Optional Pi purchases include Classic Premium and Replay Tickets. Premium doubles Classic base points and provides unlimited Classic lives; it does not change Daily or PvP. Game points and cosmetic recognition have no monetary value, and Daily and PvP do not award Pi.
+
+No gameplay,metrics collection,listing configuration or owner progress was changed in this documentation update. November21 restoration remains scheduled.
