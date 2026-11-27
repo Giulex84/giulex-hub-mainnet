@@ -5,3 +5,10 @@ node_modules/
 .env.production
 *.log
 .DS_Store
+
+# Isolated QA artifacts
+node_modules/
+tools/qa/node_modules/
+verification/
+test-results/
+playwright-report/

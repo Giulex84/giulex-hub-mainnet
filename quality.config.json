@@ -1,0 +1,12 @@
+{
+  "name": "Arena",
+  "webRoot": "public",
+  "entry": "/arena.html",
+  "loginSelector": "#login",
+  "redis": true,
+  "commands": [
+    "npm test",
+    "npm run test:ui",
+    "npm run build"
+  ]
+}
